@@ -24,10 +24,12 @@ class PruneImageCache extends Command
     /**
      * Execute the console command.
      *
+     * @param ImageCache $cache
+     *
      * @return mixed
      */
-    public function handle()
+    public function handle(ImageCache $cache)
     {
-        (new ImageCache)->prune();
+        $cache->prune();
     }
 }

@@ -36,6 +36,11 @@ return [
          */
         'timeout' => env('IMAGE_CACHE_TIMEOUT', 5.0),
 
+        /*
+         | Interval for the scheduled task to prune the image cache.
+         */
+        'prune_interval' => '*/5 * * * *', // Every five minutes
+
     ],
 
 ];
