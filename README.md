@@ -7,8 +7,17 @@ The image cache is specifically designed for use in concurrent image processing 
 ## Installation
 
 ```
+composer config repositories.image-cache vcs https://github.com/biigle/laravel-image-cache
 composer require biigle/laravel-image-cache
 ```
+
+### Laravel
+
+Add `Biigle\ImageCache\ImageCacheServiceProvider::class` to the providers array of `config/app.php`.
+
+### Lumen
+
+Add `$app->register(Biigle\ImageCache\ImageCacheServiceProvider::class);` to `bootstrap/app.php`.
 
 ## Usage
 
