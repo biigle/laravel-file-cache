@@ -15,9 +15,22 @@ composer require biigle/laravel-image-cache
 
 Add `Biigle\ImageCache\ImageCacheServiceProvider::class` to the providers array of `config/app.php`.
 
+To use the `ImageCache` facade, add the following to the aliases array of `config/app.php`:
+```php
+'ImageCache' => Biigle\ImageCache\Facades\ImageCache::class,
+```
+
 ### Lumen
 
 Add `$app->register(Biigle\ImageCache\ImageCacheServiceProvider::class);` to `bootstrap/app.php`.
+
+To use the `ImageCache` facade, enable `$app->withFacades()` and add the following to `bootstrap/app.php`:
+
+```php
+if (!class_exists(ImageCache::class)) {
+    class_alias(Biigle\ImageCache\Facades\ImageCache::class, 'ImageCache');
+}
+```
 
 ## Usage
 
