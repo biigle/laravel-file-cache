@@ -21,7 +21,7 @@ class ImageCacheServiceProvider extends ServiceProvider
     public function boot(Schedule $schedule, Dispatcher $events)
     {
         $this->publishes([
-            __DIR__.'/config/image.php' => config_path('image.php'),
+            __DIR__.'/config/image.php' => base_path('config/image.php'),
         ], 'config');
 
         $schedule->command(PruneImageCache::class)
