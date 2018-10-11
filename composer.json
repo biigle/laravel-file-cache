@@ -3,14 +3,14 @@
     "description": "Fetch and cache image files from filesystem, cloud storage or public webservers in Laravel",
     "type": "library",
     "require": {
-        "illuminate/filesystem": ">=5.5",
+        "illuminate/filesystem": "^5.5",
         "league/flysystem": "^1.0",
-        "illuminate/support": ">=5.5",
-        "illuminate/console": ">=5.5"
+        "illuminate/support": "^5.5",
+        "illuminate/console": "^5.5"
     },
     "require-dev": {
         "phpunit/phpunit": "^7.4",
-        "laravel/laravel": "^5.7",
+        "laravel/laravel": "^5.5",
         "mockery/mockery": "^1.2"
     },
     "authors": [
@@ -31,5 +31,15 @@
         "classmap": [
             "tests/TestCase.php"
         ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Biigle\\ImageCache\\ImageCacheServiceProvider"
+            ],
+            "aliases": {
+                "ImageCache": "Biigle\\ImageCache\\Facades\\ImageCache"
+            }
+        }
     }
 }

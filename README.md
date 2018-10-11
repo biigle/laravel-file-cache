@@ -13,12 +13,7 @@ composer require biigle/laravel-image-cache
 
 ### Laravel
 
-Add `Biigle\ImageCache\ImageCacheServiceProvider::class` to the providers array of `config/app.php`.
-
-To use the `ImageCache` facade, add the following to the aliases array of `config/app.php`:
-```php
-'ImageCache' => Biigle\ImageCache\Facades\ImageCache::class,
-```
+The service provider and `ImageCache` facade are auto-discovered by Laravel.
 
 ### Lumen
 
@@ -32,25 +27,25 @@ if (!class_exists(ImageCache::class)) {
 }
 ```
 
+Without facades, the image cache instance is available as `app('image-cache')`.
+
 ## Usage
 
 ```php
-use Biigle\ImageCache\ImageCache;
+use ImageCache;
 use Biigle\ImageCache\GenericImage;
 
-$imageUrl = 'https://example.com/images/image.jpg';
 // Implements Biigle\ImageCache\Contracts\Image.
-$image = new GenericImage($imageUrl);
+$image = new GenericImage('https://example.com/images/image.jpg');
 
-$cache = new ImageCache;
-$cache->get($image, function ($image, $path) {
+ImageCache::get($image, function ($image, $path) {
     // do stuff
 });
 ```
 
 If the image URL specifies another protocol than `http` or `https` (e.g. `mydisk://images/image.jpg`), the image cache looks for the image in the appropriate storage disk configured at `filesystems.disks`. You can not use a local file path as URL (e.g. `/vol/images/image.jpg`). Instead, configure a storage disk with the `local` driver.
 
-You can also use the `Biigle\ImageCache\Facades\ImageCache` facade to access the image cache.
+You can also use the `ImageCache` facade to access the image cache.
 
 ## Configuration
 
@@ -105,12 +100,8 @@ The image cache is cleared when you call `php artisan cache:clear`.
 The `ImageCache` facade provides a fake for easy testing. The fake does not actually fetch and store any images, but only executes the callback function with a faked image path.
 
 ```php
+use ImageCache;
 use Biigle\ImageCache\GenericImage;
-use Biigle\ImageCache\Facades\ImageCache as ImageCacheFacade;
-
-if (!class_exists(ImageCache::class)) {
-    class_alias(ImageCacheFacade::class, 'ImageCache');
-}
 
 ImageCache::fake();
 $image = new GenericImage('https://example.com/image.jpg');
