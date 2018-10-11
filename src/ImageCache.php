@@ -262,7 +262,7 @@ class ImageCache implements ImageCacheContract
             // by 'nlink' === 0 above.
             unlink($cachedPath);
             fclose($handle);
-            throw new Exception("Error while caching image {$image->getId()}: {$e->getMessage()}");
+            throw new Exception("Error while caching image '{$image->getUrl()}': {$e->getMessage()}");
         }
 
         return $fileInfo;
@@ -431,7 +431,9 @@ class ImageCache implements ImageCacheContract
      */
     protected function getCachedPath(Image $image)
     {
-        return "{$this->config['path']}/{$image->getId()}";
+        $hash = hash('sha256', $image->getUrl());
+
+        return "{$this->config['path']}/{$hash}";
     }
 
     /**

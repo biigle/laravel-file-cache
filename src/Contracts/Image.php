@@ -4,13 +4,6 @@ namespace Biigle\ImageCache\Contracts;
 
 interface Image
 {
-    /**
-    * Get the image ID.
-    *
-    * @return int
-    */
-   public function getId();
-
    /**
     * Get the image URL.
     *

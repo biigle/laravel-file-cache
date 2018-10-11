@@ -22,7 +22,9 @@ class ImageCacheFake implements ImageCacheContract
      */
     public function get(Image $image, $callback)
     {
-        return $callback($image, "{$this->path}/{$image->getId()}");
+        $hash = hash('sha256', $image->getUrl());
+
+        return $callback($image, "{$this->path}/{$hash}");
     }
 
     /**

@@ -38,10 +38,9 @@ if (!class_exists(ImageCache::class)) {
 use Biigle\ImageCache\ImageCache;
 use Biigle\ImageCache\GenericImage;
 
-$imageId = 1;
 $imageUrl = 'https://example.com/images/image.jpg';
 // Implements Biigle\ImageCache\Contracts\Image.
-$image = new GenericImage($imageId, $imageUrl);
+$image = new GenericImage($imageUrl);
 
 $cache = new ImageCache;
 $cache->get($image, function ($image, $path) {
@@ -114,7 +113,7 @@ if (!class_exists(ImageCache::class)) {
 }
 
 ImageCache::fake();
-$image = new GenericImage(1, 'https://example.com/image.jpg');
+$image = new GenericImage('https://example.com/image.jpg');
 $path = ImageCache::get($image, function ($image, $path) {
     return $path;
 });
