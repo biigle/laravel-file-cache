@@ -45,8 +45,6 @@ ImageCache::get($image, function ($image, $path) {
 
 If the image URL specifies another protocol than `http` or `https` (e.g. `mydisk://images/image.jpg`), the image cache looks for the image in the appropriate storage disk configured at `filesystems.disks`. You can not use a local file path as URL (e.g. `/vol/images/image.jpg`). Instead, configure a storage disk with the `local` driver.
 
-You can also use the `ImageCache` facade to access the image cache.
-
 ## Configuration
 
 The image cache comes with a sensible default configuration. You can override it in the `image.cache` namespace or with environment variables.
