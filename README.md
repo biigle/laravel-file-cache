@@ -31,6 +31,8 @@ Without facades, the image cache instance is available as `app('image-cache')`.
 
 ## Usage
 
+Take a look at the [`ImageCache`](src/Contracts/ImageCache.php) contract to see the public API of the image cache. Example:
+
 ```php
 use ImageCache;
 use Biigle\ImageCache\GenericImage;
