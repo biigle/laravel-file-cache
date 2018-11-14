@@ -44,4 +44,9 @@ interface ImageCache
      * Remove cached images that are too old or exceed the maximum cache size.
      */
     public function prune();
+
+    /**
+     * Delete all unused cached images.
+     */
+    public function clear();
 }

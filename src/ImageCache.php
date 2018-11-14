@@ -177,7 +177,7 @@ class ImageCache implements ImageCacheContract
     }
 
     /**
-     * Delete all unused cached files.
+     * {@inheritdoc}
      */
     public function clear()
     {
