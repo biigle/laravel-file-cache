@@ -56,41 +56,21 @@ class ImageCache implements ImageCacheContract
     /**
      * {@inheritdoc}
      */
-    public function get(Image $image, $callback)
+    public function get(Image $image, callable $callback)
     {
-        $file = $this->retrieve($image);
-
-        try {
-            $result = call_user_func($callback, $image, $file['path']);
-        } finally {
-            fclose($file['handle']);
-        }
-
-        return $result;
+        return $this->batch([$image], function ($images, $paths) use ($callback) {
+            return call_user_func($callback, $images[0], $paths[0]);
+        });
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getOnce(Image $image, $callback)
+    public function getOnce(Image $image, callable $callback)
     {
-        $file = $this->retrieve($image);
-        try {
-            $result = call_user_func($callback, $image, $file['path']);
-        } finally {
-            // Convert to exclusive lock for deletion. Don't delete if lock can't be
-            // obtained.
-            if (flock($file['handle'], LOCK_EX | LOCK_NB)) {
-                // This path is not the same than $cachedPath for locally stored files.
-                $path = $this->getCachedPath($image);
-                if ($this->files->exists($path)) {
-                    $this->files->delete($path);
-                }
-            }
-            fclose($file['handle']);
-        }
-
-        return $result;
+        return $this->batchOnce([$image], function ($images, $paths) use ($callback) {
+            return call_user_func($callback, $images[0], $paths[0]);
+        });
     }
 
     /**
@@ -123,6 +103,64 @@ class ImageCache implements ImageCacheContract
         } catch (FileNotFoundException $e) {
             throw new Exception($e->getMessage());
         }
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function batch(array $images, callable $callback)
+    {
+        $files = array_map(function ($image) {
+            return $this->retrieve($image);
+        }, $images);
+
+        $paths = array_map(function ($file) {
+            return $file['path'];
+        }, $files);
+
+        try {
+            $result = call_user_func($callback, $images, $paths);
+        } finally {
+            foreach ($files as $file) {
+                fclose($file['handle']);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function batchOnce(array $images, callable $callback)
+    {
+        $files = array_map(function ($image) {
+            return $this->retrieve($image);
+        }, $images);
+
+        $paths = array_map(function ($file) {
+            return $file['path'];
+        }, $files);
+
+        try {
+            $result = call_user_func($callback, $images, $paths);
+        } finally {
+            foreach ($files as $index => $file) {
+                // Convert to exclusive lock for deletion. Don't delete if lock can't be
+                // obtained.
+                if (flock($file['handle'], LOCK_EX | LOCK_NB)) {
+                    // This path is not the same than $file['path'] for locally stored
+                    // files. We don't want to delete locally stored files.
+                    $path = $this->getCachedPath($images[$index]);
+                    if ($this->files->exists($path)) {
+                        $this->files->delete($path);
+                    }
+                }
+                fclose($file['handle']);
+            }
+        }
+
+        return $result;
     }
 
     /**

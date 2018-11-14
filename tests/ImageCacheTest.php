@@ -192,6 +192,31 @@ class ImageCacheTest extends TestCase
         fclose($stream);
     }
 
+    public function testBatch()
+    {
+        $image = new GenericImage('test://test-image.jpg');
+        $image2 = new GenericImage('test://test-image.jpg');
+
+        $cache = new ImageCache(['path' => $this->cachePath]);
+        $paths = $cache->batch([$image, $image2], function ($images, $paths) {
+            return $paths;
+        });
+
+        $this->assertCount(2, $paths);
+        $this->assertContains('test-image.jpg', $paths[0]);
+        $this->assertContains('test-image.jpg', $paths[1]);
+    }
+
+    public function testBatchOnce()
+    {
+        $image = new GenericImage('test://test-image.jpg');
+        $hash = hash('sha256', 'test://test-image.jpg');
+        touch("{$this->cachePath}/{$hash}");
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
+        (new ImageCache(['path' => $this->cachePath]))->batchOnce([$image], $this->noop);
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
+    }
+
     public function testPrune()
     {
         $this->app['files']->put("{$this->cachePath}/abc", 'abc');

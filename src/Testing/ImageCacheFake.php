@@ -20,17 +20,17 @@ class ImageCacheFake implements ImageCacheContract
     /**
      * {@inheritdoc}
      */
-    public function get(Image $image, $callback)
+    public function get(Image $image, callable $callback)
     {
-        $hash = hash('sha256', $image->getUrl());
-
-        return $callback($image, "{$this->path}/{$hash}");
+        return $this->batch([$image], function ($images, $paths) use ($callback) {
+            return call_user_func($callback, $images[0], $paths[0]);
+        });
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getOnce(Image $image, $callback)
+    public function getOnce(Image $image, callable $callback)
     {
         return $this->get($image, $callback);
     }
@@ -45,6 +45,28 @@ class ImageCacheFake implements ImageCacheContract
             'size' => 0,
             'mime' => 'inode/x-empty',
         ];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function batch(array $images, callable $callback)
+    {
+        $paths = array_map(function ($image) {
+            $hash = hash('sha256', $image->getUrl());
+
+            return "{$this->path}/{$hash}";
+        }, $images);
+
+        return $callback($images, $paths);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function batchOnce(array $images, callable $callback)
+    {
+        return $this->batch($images, $callback);
     }
 
     /**
