@@ -134,7 +134,6 @@ class ImageCache implements ImageCacheContract
             return;
         }
 
-        // Prune images by age.
         $now = time();
         // Allowed age in seconds.
         $allowedAge = $this->config['max_age'] * 60;
@@ -146,17 +145,18 @@ class ImageCache implements ImageCacheContract
             ->in($this->config['path'])
             ->getIterator();
 
+        // Prune images by age.
         foreach ($files as $file) {
-            if ($now - $file->getATime() > $allowedAge) {
-                $this->delete($file);
-            } else {
-                $totalSize += $file->getSize();
+            if ($now - $file->getATime() > $allowedAge && $this->delete($file)) {
+                continue;
             }
+
+            $totalSize += $file->getSize();
         }
 
-        // Prune images by cache size.
         $allowedSize = $this->config['max_size'];
 
+        // Prune images by cache size.
         if ($totalSize > $allowedSize) {
             $files = Finder::create()
                 ->files()
@@ -167,8 +167,10 @@ class ImageCache implements ImageCacheContract
                 ->getIterator();
 
             while ($totalSize > $allowedSize && ($file = $files->current())) {
-                $totalSize -= $file->getSize();
-                $this->delete($file);
+                $fileSize = $file->getSize();
+                if ($this->delete($file)) {
+                    $totalSize -= $fileSize;
+                }
                 $files->next();
             }
         }
@@ -198,18 +200,25 @@ class ImageCache implements ImageCacheContract
      * Delete a cached file it it is not used.
      *
      * @param SplFileInfo $file
+     *
+     * @return bool If the file has been deleted.
      */
     protected function delete(SplFileInfo $file)
     {
         $handle = fopen($file->getRealPath(), 'r');
+        $deleted = false;
+
         try {
             // Only delete the file if it is not currently used. Else move on.
             if (flock($handle, LOCK_EX | LOCK_NB)) {
                 $this->files->delete($file->getRealPath());
+                $deleted = true;
             }
         } finally {
             fclose($handle);
         }
+
+        return $deleted;
     }
 
     /**
