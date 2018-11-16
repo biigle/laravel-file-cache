@@ -17,7 +17,11 @@ The service provider and `ImageCache` facade are auto-discovered by Laravel.
 
 ### Lumen
 
-Add `$app->register(Biigle\ImageCache\ImageCacheServiceProvider::class);` to `bootstrap/app.php`.
+Add this to `bootstrap/app.php`:
+```php
+$app->register(Biigle\ImageCache\ImageCacheServiceProvider::class);
+$app->register(Illuminate\Filesystem\FilesystemServiceProvider::class);
+```
 
 To use the `ImageCache` facade, enable `$app->withFacades()` and add the following to `bootstrap/app.php`:
 
