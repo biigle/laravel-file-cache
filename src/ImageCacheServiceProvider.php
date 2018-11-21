@@ -42,5 +42,22 @@ class ImageCacheServiceProvider extends ServiceProvider
         $this->app->bind('image-cache', function () {
             return new ImageCache;
         });
+
+        $this->app->singleton('command.image-cache.prune', function ($app) {
+            return new PruneImageCache;
+        });
+        $this->commands('command.image-cache.prune');
+    }
+
+    /**
+     * Get the services provided by the provider.
+     *
+     * @return array
+     */
+    public function provides()
+    {
+        return [
+            'command.image-cache.prune',
+        ];
     }
 }
