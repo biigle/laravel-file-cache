@@ -2,6 +2,7 @@
     "name": "biigle/laravel-image-cache",
     "description": "Fetch and cache image files from filesystem, cloud storage or public webservers in Laravel",
     "type": "library",
+    "license": "MIT",
     "require": {
         "illuminate/filesystem": "^5.5",
         "league/flysystem": "^1.0",
