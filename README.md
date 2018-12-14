@@ -4,10 +4,11 @@ Fetch and cache image files from filesystem, cloud storage or public webservers 
 
 The image cache is specifically designed for use in concurrent image processing with multiple parallel queue workers.
 
+[![Build Status](https://api.travis-ci.org/biigle/laravel-image-cache.svg)](https://travis-ci.org/biigle/laravel-image-cache)
+
 ## Installation
 
 ```
-composer config repositories.image-cache vcs https://github.com/biigle/laravel-image-cache
 composer require biigle/laravel-image-cache
 ```
 
