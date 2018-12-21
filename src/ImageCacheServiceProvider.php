@@ -23,13 +23,15 @@ class ImageCacheServiceProvider extends ServiceProvider
             __DIR__.'/config/image.php' => base_path('config/image.php'),
         ], 'config');
 
-        // Wait for the application to boot before adding the scheduled event.
-        // See: https://stackoverflow.com/a/36630136/1796523
-        $this->app->booted(function ($app) {
-            $app->make(Schedule::class)
-                ->command(PruneImageCache::class)
-                ->cron(config('image.cache.prune_interval'));
-        });
+        if (method_exists($this->app, 'booted')) {
+            // Wait for Laravel to boot before adding the scheduled event.
+            // See: https://stackoverflow.com/a/36630136/1796523
+            $this->app->booted([$this, 'registerScheduledPruneCommand']);
+        } else {
+            // Lumen has no 'booted' method but it works without, too, for some reason.
+            $this->registerScheduledPruneCommand($this->app);
+        }
+
 
         $events->listen('cache:clearing', ClearImageCache::class);
     }
@@ -63,5 +65,17 @@ class ImageCacheServiceProvider extends ServiceProvider
         return [
             'command.image-cache.prune',
         ];
+    }
+
+    /**
+     * Register the scheduled command to prune the image cache.
+     *
+     * @param mixed $app Laravel or Lumen application instance.
+     */
+    public function registerScheduledPruneCommand($app)
+    {
+        $app->make(Schedule::class)
+            ->command(PruneImageCache::class)
+            ->cron(config('image.cache.prune_interval'));
     }
 }
