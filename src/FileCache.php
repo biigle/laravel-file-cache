@@ -110,18 +110,18 @@ class FileCache implements FileCacheContract
      */
     public function batch(array $files, callable $callback)
     {
-        $files = array_map(function ($file) {
+        $retrieved = array_map(function ($file) {
             return $this->retrieve($file);
         }, $files);
 
         $paths = array_map(function ($file) {
             return $file['path'];
-        }, $files);
+        }, $retrieved);
 
         try {
             $result = call_user_func($callback, $files, $paths);
         } finally {
-            foreach ($files as $file) {
+            foreach ($retrieved as $file) {
                 fclose($file['handle']);
             }
         }

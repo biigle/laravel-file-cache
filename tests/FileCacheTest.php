@@ -6,6 +6,7 @@ use Mockery;
 use Exception;
 use Biigle\FileCache\FileCache;
 use Biigle\FileCache\GenericFile;
+use Biigle\FileCache\Contracts\File;
 
 class FileCacheTest extends TestCase
 {
@@ -41,7 +42,10 @@ class FileCacheTest extends TestCase
         $path = "{$this->cachePath}/{$hash}";
         $this->assertTrue(touch($path, time() - 1));
         $this->assertNotEquals(time(), fileatime($path));
-        $cache->get($file, $this->noop);
+        $file = $cache->get($file, function ($file, $path) {
+            return $file;
+        });
+        $this->assertInstanceof(File::class, $file);
         clearstatcache();
         $this->assertEquals(time(), fileatime($path));
     }
@@ -152,7 +156,11 @@ class FileCacheTest extends TestCase
         $hash = hash('sha256', 'test://test-image.jpg');
         touch("{$this->cachePath}/{$hash}");
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        (new FileCache(['path' => $this->cachePath]))->getOnce($file, $this->noop);
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $file = $cache->getOnce($file, function ($file, $path) {
+            return $file;
+        });
+        $this->assertInstanceof(File::class, $file);
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
