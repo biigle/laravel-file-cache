@@ -1,116 +1,116 @@
-# Image Cache
+# File Cache
 
-Fetch and cache image files from filesystem, cloud storage or public webservers in Laravel or Lumen.
+Fetch and cache files from local filesystem, cloud storage or public webservers in Laravel or Lumen.
 
-The image cache is specifically designed for use in concurrent image processing with multiple parallel queue workers.
+The file cache is specifically designed for use in concurrent processing with multiple parallel queue workers.
 
-[![Build Status](https://api.travis-ci.org/biigle/laravel-image-cache.svg)](https://travis-ci.org/biigle/laravel-image-cache)
+[![Build Status](https://api.travis-ci.org/biigle/laravel-file-cache.svg)](https://travis-ci.org/biigle/laravel-file-cache)
 
 ## Installation
 
 ```
-composer require biigle/laravel-image-cache
+composer require biigle/laravel-file-cache
 ```
 
 ### Laravel
 
-The service provider and `ImageCache` facade are auto-discovered by Laravel.
+The service provider and `FileCache` facade are auto-discovered by Laravel.
 
 ### Lumen
 
 Add this to `bootstrap/app.php`:
 ```php
-$app->register(Biigle\ImageCache\ImageCacheServiceProvider::class);
+$app->register(Biigle\FileCache\FileCacheServiceProvider::class);
 $app->register(Illuminate\Filesystem\FilesystemServiceProvider::class);
 ```
 
-To use the `ImageCache` facade, enable `$app->withFacades()` and add the following to `bootstrap/app.php`:
+To use the `FileCache` facade, enable `$app->withFacades()` and add the following to `bootstrap/app.php`:
 
 ```php
-if (!class_exists(ImageCache::class)) {
-    class_alias(Biigle\ImageCache\Facades\ImageCache::class, 'ImageCache');
+if (!class_exists(FileCache::class)) {
+    class_alias(Biigle\FileCache\Facades\FileCache::class, 'FileCache');
 }
 ```
 
-Without facades, the image cache instance is available as `app('image-cache')`.
+Without facades, the file cache instance is available as `app('file-cache')`.
 
 ## Usage
 
-Take a look at the [`ImageCache`](src/Contracts/ImageCache.php) contract to see the public API of the image cache. Example:
+Take a look at the [`FileCache`](src/Contracts/FileCache.php) contract to see the public API of the file cache. Example:
 
 ```php
-use ImageCache;
-use Biigle\ImageCache\GenericImage;
+use FileCache;
+use Biigle\FileCache\GenericFile;
 
-// Implements Biigle\ImageCache\Contracts\Image.
-$image = new GenericImage('https://example.com/images/image.jpg');
+// Implements Biigle\FileCache\Contracts\File.
+$file = new GenericFile('https://example.com/images/image.jpg');
 
-ImageCache::get($image, function ($image, $path) {
+FileCache::get($file, function ($file, $path) {
     // do stuff
 });
 ```
 
-If the image URL specifies another protocol than `http` or `https` (e.g. `mydisk://images/image.jpg`), the image cache looks for the image in the appropriate storage disk configured at `filesystems.disks`. You can not use a local file path as URL (e.g. `/vol/images/image.jpg`). Instead, configure a storage disk with the `local` driver.
+If the file URL specifies another protocol than `http` or `https` (e.g. `mydisk://images/image.jpg`), the file cache looks for the file in the appropriate storage disk configured at `filesystems.disks`. You can not use a local file path as URL (e.g. `/vol/images/image.jpg`). Instead, configure a storage disk with the `local` driver.
 
 ## Configuration
 
-The image cache comes with a sensible default configuration. You can override it in the `image.cache` namespace or with environment variables.
+The file cache comes with a sensible default configuration. You can override it in the `file-cache` namespace or with environment variables.
 
-### image.cache.max_image_size
+### file-cache.max_file_size
 
 Default: `1E+8` (100 MB)
-Environment: `IMAGE_CACHE_MAX_IMAGE_SIZE`
+Environment: `FILE_CACHE_MAX_FILE_SIZE`
 
-Maximum allowed size of a cached image in bytes. Set to `-1` to allow any size.
+Maximum allowed size of a cached file in bytes. Set to `-1` to allow any size.
 
-### image.cache.max_age
+### file-cache.max_age
 
 Default: `60`
-Environment: `IMAGE_CACHE_MAX_AGE`
+Environment: `FILE_CACHE_MAX_AGE`
 
-Maximum age in minutes of an image in the cache. Older images are pruned.
+Maximum age in minutes of a file in the cache. Older files are pruned.
 
-### image.cache.max_size
+### file-cache.max_size
 
 Default: `1E+9` (1 GB)
-Environment: `IMAGE_CACHE_MAX_SIZE`
+Environment: `FILE_CACHE_MAX_SIZE`
 
-Maximum size (soft limit) of the image cache in bytes. If the cache exceeds this size, old images are pruned.
+Maximum size (soft limit) of the file cache in bytes. If the cache exceeds this size, old files are pruned.
 
-### image.cache.path
+### file-cache.path
 
-Default: `'storage/framework/cache/images'`
+Default: `'storage/framework/cache/files'`
 
-Directory to use for the image cache.
+Directory to use for the file cache.
 
-### image.cache.timeout
+### file-cache.timeout
 
 Default: `5.0`
-Environment: `IMAGE_CACHE_TIMEOUT`
+Environment: `FILE_CACHE_TIMEOUT`
 
-Read timeout in seconds for fetching remote images. If the stream transmits no data for longer than this period (or cannot be established), caching the image fails.
+Read timeout in seconds for fetching remote files. If the stream transmits no data for longer than this period (or cannot be established), caching the file fails.
 
-### image.cache.prune_interval
+### file-cache.prune_interval
 
 Default `'*/5 * * * *'` (every five minutes)
 
-Interval for the scheduled task to prune the image cache.
+Interval for the scheduled task to prune the file cache.
 
 ## Clearing
 
-The image cache is cleared when you call `php artisan cache:clear`.
+The file cache is cleared when you call `php artisan cache:clear`.
 
 ## Testing
 
-The `ImageCache` facade provides a fake for easy testing. The fake does not actually fetch and store any images, but only executes the callback function with a faked image path.
+The `FileCache` facade provides a fake for easy testing. The fake does not actually fetch and store any files, but only executes the callback function with a faked file path.
 
 ```php
-use ImageCache;
-use Biigle\ImageCache\GenericImage;
+use FileCache;
+use Biigle\FileCache\GenericFile;
 
-ImageCache::fake();
-$image = new GenericImage('https://example.com/image.jpg');
-$path = ImageCache::get($image, function ($image, $path) {
+FileCache::fake();
+$file = new GenericFile('https://example.com/image.jpg');
+$path = FileCache::get($file, function ($file, $path) {
     return $path;
 });
 

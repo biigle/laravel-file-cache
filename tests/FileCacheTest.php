@@ -1,20 +1,20 @@
 <?php
 
-namespace Biigle\ImageCache\Tests;
+namespace Biigle\FileCache\Tests;
 
 use Mockery;
 use Exception;
-use Biigle\ImageCache\ImageCache;
-use Biigle\ImageCache\GenericImage;
+use Biigle\FileCache\FileCache;
+use Biigle\FileCache\GenericFile;
 
-class ImageCacheTest extends TestCase
+class FileCacheTest extends TestCase
 {
     public function setUp()
     {
         parent::setUp();
-        $this->cachePath = sys_get_temp_dir().'/biigle_image_cache_test';
-        $this->diskPath = sys_get_temp_dir().'/biigle_image_cache_disk';
-        $this->noop = function ($image, $path) {
+        $this->cachePath = sys_get_temp_dir().'/biigle_file_cache_test';
+        $this->diskPath = sys_get_temp_dir().'/biigle_file_cache_disk';
+        $this->noop = function ($file, $path) {
             return $path;
         };
         $this->app['files']->makeDirectory($this->cachePath, 0755, false, true);
@@ -34,27 +34,27 @@ class ImageCacheTest extends TestCase
 
     public function testGetExists()
     {
-        $cache = new ImageCache(['path' => $this->cachePath]);
-        $image = new GenericImage('abc://some/image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $file = new GenericFile('abc://some/image.jpg');
         $hash = hash('sha256', 'abc://some/image.jpg');
 
         $path = "{$this->cachePath}/{$hash}";
         $this->assertTrue(touch($path, time() - 1));
         $this->assertNotEquals(time(), fileatime($path));
-        $cache->get($image, $this->noop);
+        $cache->get($file, $this->noop);
         clearstatcache();
         $this->assertEquals(time(), fileatime($path));
     }
 
     public function testGetRemote()
     {
-        $image = new GenericImage('https://files/image.jpg');
+        $file = new GenericFile('https://files/image.jpg');
         $hash = hash('sha256', 'https://files/image.jpg');
-        $cache = new ImageCacheStub(['path' => $this->cachePath]);
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
 
         $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        $path = $cache->get($image, $this->noop);
+        $path = $cache->get($file, $this->noop);
         $this->assertEquals("{$this->cachePath}/{$hash}", $path);
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
         $this->assertFalse(is_resource($cache->stream));
@@ -62,25 +62,25 @@ class ImageCacheTest extends TestCase
 
     public function testGetRemoteTooLarge()
     {
-        $image = new GenericImage('https://files/image.jpg');
-        $cache = new ImageCacheStub([
+        $file = new GenericFile('https://files/image.jpg');
+        $cache = new FileCacheStub([
             'path' => $this->cachePath,
-            'max_image_size' => 1,
+            'max_file_size' => 1,
         ]);
 
         $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('file is too large');
-        $cache->get($image, $this->noop);
+        $cache->get($file, $this->noop);
     }
 
     public function testGetDiskDoesNotExist()
     {
-        $image = new GenericImage('abc://files/image.jpg');
-        $cache = new ImageCache(['path' => $this->cachePath]);
+        $file = new GenericFile('abc://files/image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
 
         try {
-            $cache->get($image, $this->noop);
+            $cache->get($file, $this->noop);
             $this->assertTrue(false);
         } catch (Exception $e) {
             $this->assertContains("disk 'abc' does not exist", $e->getMessage());
@@ -89,17 +89,17 @@ class ImageCacheTest extends TestCase
 
     public function testGetDiskLocal()
     {
-        $image = new GenericImage('test://test-image.jpg');
-        $cache = new ImageCache(['path' => $this->cachePath]);
+        $file = new GenericFile('test://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
 
-        $path = $cache->get($image, $this->noop);
+        $path = $cache->get($file, $this->noop);
         $this->assertEquals($this->diskPath.'/test-image.jpg', $path);
     }
 
     public function testGetDiskCloud()
     {
         config(['filesystems.disks.s3' => ['driver' => 's3']]);
-        $image = new GenericImage('s3://files/test-image.jpg');
+        $file = new GenericFile('s3://files/test-image.jpg');
         $hash = hash('sha256', 's3://files/test-image.jpg');
 
         $stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
@@ -111,10 +111,10 @@ class ImageCacheTest extends TestCase
         $mock->shouldReceive('readStream')->once()->andReturn($stream);
         $this->app['filesystem'] = $mock;
 
-        $cache = new ImageCache(['path' => $this->cachePath]);
+        $cache = new FileCache(['path' => $this->cachePath]);
 
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        $path = $cache->get($image, $this->noop);
+        $path = $cache->get($file, $this->noop);
         $this->assertEquals("{$this->cachePath}/{$hash}", $path);
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
         $this->assertFalse(is_resource($stream));
@@ -123,7 +123,7 @@ class ImageCacheTest extends TestCase
     public function testGetDiskCloudTooLarge()
     {
         config(['filesystems.disks.s3' => ['driver' => 's3']]);
-        $image = new GenericImage('s3://files/test-image.jpg');
+        $file = new GenericFile('s3://files/test-image.jpg');
         $hash = hash('sha256', 's3://files/test-image.jpg');
 
         $stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
@@ -135,70 +135,70 @@ class ImageCacheTest extends TestCase
         $mock->shouldReceive('readStream')->once()->andReturn($stream);
         $this->app['filesystem'] = $mock;
 
-        $cache = new ImageCache([
+        $cache = new FileCache([
             'path' => $this->cachePath,
-            'max_image_size' => 1,
+            'max_file_size' => 1,
         ]);
 
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('file is too large');
-        $path = $cache->get($image, $this->noop);
+        $path = $cache->get($file, $this->noop);
     }
 
     public function testGetOnce()
     {
-        $image = new GenericImage('test://test-image.jpg');
+        $file = new GenericFile('test://test-image.jpg');
         $hash = hash('sha256', 'test://test-image.jpg');
         touch("{$this->cachePath}/{$hash}");
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        (new ImageCache(['path' => $this->cachePath]))->getOnce($image, $this->noop);
+        (new FileCache(['path' => $this->cachePath]))->getOnce($file, $this->noop);
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
     public function testGetStreamCached()
     {
-        $image = new GenericImage('test://test-image.jpg');
+        $file = new GenericFile('test://test-image.jpg');
         $hash = hash('sha256', 'test://test-image.jpg');
 
         $path = "{$this->cachePath}/{$hash}";
         touch($path, time() - 1);
 
-        $cache = new ImageCacheStub(['path' => $this->cachePath]);
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
         $cache->stream = 'abc123';
         $this->assertNotEquals(time(), fileatime($path));
-        $this->assertEquals('abc123', $cache->getStream($image));
+        $this->assertEquals('abc123', $cache->getStream($file));
         clearstatcache();
         $this->assertEquals(time(), fileatime($path));
     }
 
     public function testGetStreamRemote()
     {
-        $image = new GenericImage('https://files/test-image.jpg');
-        $cache = new ImageCacheStub(['path' => $this->cachePath]);
+        $file = new GenericFile('https://files/test-image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
         $cache->stream = 'abc123';
-        $this->assertEquals('abc123', $cache->getStream($image));
+        $this->assertEquals('abc123', $cache->getStream($file));
     }
 
     public function testGetStreamDisk()
     {
         $storage = $this->app['filesystem'];
         $storage->disk('test')->put('files/test.txt', 'test123');
-        $image = new GenericImage('test://files/test.txt');
-        $cache = new ImageCache(['path' => $this->cachePath]);
+        $file = new GenericFile('test://files/test.txt');
+        $cache = new FileCache(['path' => $this->cachePath]);
 
-        $stream = $cache->getStream($image);
+        $stream = $cache->getStream($file);
         $this->assertTrue(is_resource($stream));
         fclose($stream);
     }
 
     public function testBatch()
     {
-        $image = new GenericImage('test://test-image.jpg');
-        $image2 = new GenericImage('test://test-image.jpg');
+        $file = new GenericFile('test://test-image.jpg');
+        $file2 = new GenericFile('test://test-image.jpg');
 
-        $cache = new ImageCache(['path' => $this->cachePath]);
-        $paths = $cache->batch([$image, $image2], function ($images, $paths) {
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $paths = $cache->batch([$file, $file2], function ($files, $paths) {
             return $paths;
         });
 
@@ -209,11 +209,11 @@ class ImageCacheTest extends TestCase
 
     public function testBatchOnce()
     {
-        $image = new GenericImage('test://test-image.jpg');
+        $file = new GenericFile('test://test-image.jpg');
         $hash = hash('sha256', 'test://test-image.jpg');
         touch("{$this->cachePath}/{$hash}");
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        (new ImageCache(['path' => $this->cachePath]))->batchOnce([$image], $this->noop);
+        (new FileCache(['path' => $this->cachePath]))->batchOnce([$file], $this->noop);
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
@@ -223,7 +223,7 @@ class ImageCacheTest extends TestCase
         touch("{$this->cachePath}/abc", time() - 1);
         $this->app['files']->put("{$this->cachePath}/def", 'def');
 
-        $cache = new ImageCache([
+        $cache = new FileCache([
             'path' => $this->cachePath,
             'max_size' => 3,
         ]);
@@ -231,7 +231,7 @@ class ImageCacheTest extends TestCase
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/def"));
 
-        $cache = new ImageCache([
+        $cache = new FileCache([
             'path' => $this->cachePath,
             'max_size' => 0,
         ]);
@@ -245,7 +245,7 @@ class ImageCacheTest extends TestCase
         touch("{$this->cachePath}/abc", time() - 61);
         $this->app['files']->put("{$this->cachePath}/def", 'def');
 
-        $cache = new ImageCache([
+        $cache = new FileCache([
             'path' => $this->cachePath,
             'max_age' => 1,
         ]);
@@ -260,22 +260,22 @@ class ImageCacheTest extends TestCase
          $this->app['files']->put("{$this->cachePath}/def", 'abc');
          $handle = fopen("{$this->cachePath}/def", 'r');
          flock($handle, LOCK_SH);
-         (new ImageCache(['path' => $this->cachePath]))->clear();
+         (new FileCache(['path' => $this->cachePath]))->clear();
          fclose($handle);
          $this->assertTrue($this->app['files']->exists("{$this->cachePath}/def"));
          $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
      }
 }
 
-class ImageCacheStub extends ImageCache
+class FileCacheStub extends FileCache
 {
     const MAX_RETRIES = 1;
     public $stream = null;
 
-    protected function getImageStream($url, $context = null)
+    protected function getFileStream($url, $context = null)
     {
         if (is_null($this->stream)) {
-            return parent::getImageStream($url, $context);
+            return parent::getFileStream($url, $context);
         }
 
         return $this->stream;

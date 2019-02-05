@@ -1,11 +1,11 @@
 <?php
 
-namespace Biigle\ImageCache\Facades;
+namespace Biigle\FileCache\Facades;
 
 use Illuminate\Support\Facades\Facade;
-use Biigle\ImageCache\Testing\ImageCacheFake;
+use Biigle\FileCache\Testing\FileCacheFake;
 
-class ImageCache extends Facade
+class FileCache extends Facade
 {
     /**
      * Use testing instance.
@@ -14,7 +14,7 @@ class ImageCache extends Facade
      */
     public static function fake()
     {
-        static::swap(new ImageCacheFake(static::getFacadeApplication()));
+        static::swap(new FileCacheFake(static::getFacadeApplication()));
     }
 
     /**
@@ -24,6 +24,6 @@ class ImageCache extends Facade
      */
     protected static function getFacadeAccessor()
     {
-        return 'image-cache';
+        return 'file-cache';
     }
 }

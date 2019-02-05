@@ -1,11 +1,11 @@
 <?php
 
-namespace Biigle\ImageCache\Contracts;
+namespace Biigle\FileCache\Contracts;
 
-interface Image
+interface File
 {
    /**
-    * Get the image URL.
+    * Get the file URL.
     *
     * This may be a remote URL starting with "http://" or "https://", or a storage disk
     * path starting with "[disk-name]://".

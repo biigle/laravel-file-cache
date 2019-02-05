@@ -1,14 +1,14 @@
 <?php
 
-namespace Biigle\ImageCache;
+namespace Biigle\FileCache;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Console\Scheduling\Schedule;
-use Biigle\ImageCache\Listeners\ClearImageCache;
-use Biigle\ImageCache\Console\Commands\PruneImageCache;
+use Biigle\FileCache\Listeners\ClearFileCache;
+use Biigle\FileCache\Console\Commands\PruneFileCache;
 
-class ImageCacheServiceProvider extends ServiceProvider
+class FileCacheServiceProvider extends ServiceProvider
 {
     /**
      * Bootstrap the application events.
@@ -20,7 +20,7 @@ class ImageCacheServiceProvider extends ServiceProvider
     public function boot(Dispatcher $events)
     {
         $this->publishes([
-            __DIR__.'/config/image.php' => base_path('config/image.php'),
+            __DIR__.'/config/file-cache.php' => base_path('config/file-cache.php'),
         ], 'config');
 
         if (method_exists($this->app, 'booted')) {
@@ -33,7 +33,7 @@ class ImageCacheServiceProvider extends ServiceProvider
         }
 
 
-        $events->listen('cache:clearing', ClearImageCache::class);
+        $events->listen('cache:clearing', ClearFileCache::class);
     }
 
     /**
@@ -43,16 +43,16 @@ class ImageCacheServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        $this->mergeConfigFrom(__DIR__.'/config/image.php', 'image');
+        $this->mergeConfigFrom(__DIR__.'/config/file-cache.php', 'file-cache');
 
-        $this->app->bind('image-cache', function () {
-            return new ImageCache;
+        $this->app->bind('file-cache', function () {
+            return new FileCache;
         });
 
-        $this->app->singleton('command.image-cache.prune', function ($app) {
-            return new PruneImageCache;
+        $this->app->singleton('command.file-cache.prune', function ($app) {
+            return new PruneFileCache;
         });
-        $this->commands('command.image-cache.prune');
+        $this->commands('command.file-cache.prune');
     }
 
     /**
@@ -63,19 +63,19 @@ class ImageCacheServiceProvider extends ServiceProvider
     public function provides()
     {
         return [
-            'command.image-cache.prune',
+            'command.file-cache.prune',
         ];
     }
 
     /**
-     * Register the scheduled command to prune the image cache.
+     * Register the scheduled command to prune the file cache.
      *
      * @param mixed $app Laravel or Lumen application instance.
      */
     public function registerScheduledPruneCommand($app)
     {
         $app->make(Schedule::class)
-            ->command(PruneImageCache::class)
-            ->cron(config('image.cache.prune_interval'));
+            ->command(PruneFileCache::class)
+            ->cron(config('file.cache.prune_interval'));
     }
 }

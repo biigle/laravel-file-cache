@@ -1,13 +1,13 @@
 <?php
 
-namespace Biigle\ImageCache;
+namespace Biigle\FileCache;
 
-use Biigle\ImageCache\Contracts\Image;
+use Biigle\FileCache\Contracts\File;
 
-class GenericImage implements Image
+class GenericFile implements File
 {
     /**
-     * The image URL.
+     * The file URL.
      *
      * @var string
      */

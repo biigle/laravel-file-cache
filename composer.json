@@ -1,6 +1,6 @@
 {
-    "name": "biigle/laravel-image-cache",
-    "description": "Fetch and cache image files from filesystem, cloud storage or public webservers in Laravel",
+    "name": "biigle/laravel-file-cache",
+    "description": "Fetch and cache files from local filesystem, cloud storage or public webservers in Laravel",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -22,12 +22,12 @@
     ],
     "autoload": {
         "psr-4": {
-            "Biigle\\ImageCache\\": "src"
+            "Biigle\\FileCache\\": "src"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Biigle\\ImageCache\\Tests\\": "tests/"
+            "Biigle\\FileCache\\Tests\\": "tests/"
         },
         "classmap": [
             "tests/TestCase.php"
@@ -36,10 +36,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Biigle\\ImageCache\\ImageCacheServiceProvider"
+                "Biigle\\FileCache\\FileCacheServiceProvider"
             ],
             "aliases": {
-                "ImageCache": "Biigle\\ImageCache\\Facades\\ImageCache"
+                "FileCache": "Biigle\\FileCache\\Facades\\FileCache"
             }
         }
     }

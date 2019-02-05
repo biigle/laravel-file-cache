@@ -1,15 +1,15 @@
 <?php
 
-namespace Biigle\ImageCache\Tests\Listeners;
+namespace Biigle\FileCache\Tests\Listeners;
 
-use Biigle\ImageCache\Tests\TestCase;
+use Biigle\FileCache\Tests\TestCase;
 
-class ClearImageCacheTest extends TestCase
+class ClearFileCacheTest extends TestCase
 {
     public function setUp()
     {
         parent::setUp();
-        $this->cachePath = sys_get_temp_dir().'/biigle_image_cache_test';
+        $this->cachePath = sys_get_temp_dir().'/biigle_file_cache_test';
         $this->app['files']->makeDirectory($this->cachePath, 0755, false, true);
     }
 
@@ -21,7 +21,7 @@ class ClearImageCacheTest extends TestCase
 
     public function testListen()
     {
-        config(['image.cache.path' => $this->cachePath]);
+        config(['file-cache.path' => $this->cachePath]);
         $this->app['files']->put($this->cachePath.'/1', 'abc');
         $this->app['events']->dispatch('cache:clearing');
         $this->assertFalse($this->app['files']->exists($this->cachePath.'/1'));
