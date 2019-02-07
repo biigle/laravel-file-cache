@@ -76,6 +76,6 @@ class FileCacheServiceProvider extends ServiceProvider
     {
         $app->make(Schedule::class)
             ->command(PruneFileCache::class)
-            ->cron(config('file.cache.prune_interval'));
+            ->cron(config('file-cache.prune_interval'));
     }
 }
