@@ -58,7 +58,7 @@ The file cache comes with a sensible default configuration. You can override it 
 
 ### file-cache.max_file_size
 
-Default: `1E+8` (100 MB)
+Default: `-1` (any size)
 Environment: `FILE_CACHE_MAX_FILE_SIZE`
 
 Maximum allowed size of a cached file in bytes. Set to `-1` to allow any size.

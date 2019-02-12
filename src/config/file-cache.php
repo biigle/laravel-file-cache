@@ -5,7 +5,7 @@ return [
     /*
     | Maximum allowed size of a cached file in bytes. Set to -1 to allow any size.
     */
-    'max_file_size' => env('FILE_CACHE_MAX_FILE_SIZE', 1E+8), // 100 MB
+    'max_file_size' => env('FILE_CACHE_MAX_FILE_SIZE', -1),
 
     /*
     | Maximum age in minutes of an file in the cache. Older files are pruned.
