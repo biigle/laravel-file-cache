@@ -96,6 +96,12 @@ Default `'*/5 * * * *'` (every five minutes)
 
 Interval for the scheduled task to prune the file cache.
 
+### file-cache.mime_types
+
+Default: `[]` (allow all types)
+
+Array of allowed MIME types for cached files. Caching of files with other types will fail.
+
 ## Clearing
 
 The file cache is cleared when you call `php artisan cache:clear`.

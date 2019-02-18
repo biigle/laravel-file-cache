@@ -24,6 +24,11 @@ class FileCacheTest extends TestCase
             'driver' => 'local',
             'root' => $this->diskPath,
         ]]);
+
+        config(['filesystems.disks.fixtures' => [
+            'driver' => 'local',
+            'root' => __DIR__.'/files',
+        ]]);
     }
 
     public function tearDown()
@@ -272,6 +277,22 @@ class FileCacheTest extends TestCase
          fclose($handle);
          $this->assertTrue($this->app['files']->exists("{$this->cachePath}/def"));
          $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
+     }
+
+     public function testMimeTypeWhitelist()
+     {
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'mime_types' => ['image/jpeg'],
+        ]);
+        $cache->get(new GenericFile('fixtures://test-image.jpg'), $this->noop);
+
+        try {
+            $cache->get(new GenericFile('fixtures://test-file.txt'), $this->noop);
+            $this->assertTrue(false);
+        } catch (Exception $e) {
+            $this->assertContains("type 'text/plain' not allowed", $e->getMessage());
+        }
      }
 }
 

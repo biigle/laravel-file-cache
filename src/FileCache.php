@@ -307,7 +307,7 @@ class FileCache implements FileCacheContract
         } catch (Exception $e) {
             // Remove the empty file if writing failed. This is the case that is caught
             // by 'nlink' === 0 above.
-            unlink($cachedPath);
+            @unlink($cachedPath);
             fclose($handle);
             throw new Exception("Error while caching file '{$file->getUrl()}': {$e->getMessage()}");
         }
@@ -358,6 +358,13 @@ class FileCache implements FileCacheContract
             }
 
             $cachedPath = $newCachedPath;
+        }
+
+        if (!empty($this->config['mime_types'])) {
+            $type = $this->files->mimeType($cachedPath);
+            if (!in_array($type, $this->config['mime_types'])) {
+                throw new Exception("MIME type '{$type}' not allowed.");
+            }
         }
 
         return [

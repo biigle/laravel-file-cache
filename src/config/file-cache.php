@@ -35,4 +35,11 @@ return [
      */
     'prune_interval' => '*/5 * * * *', // Every five minutes
 
+    /*
+     | Allowed MIME types for cached files. Fetching of files with any other type fails.
+     | This is especially useful for files from a remote source. Leave empty to allow all
+     | types.
+     */
+    'mime_types' => [],
+
 ];
