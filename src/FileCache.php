@@ -500,11 +500,13 @@ class FileCache implements FileCacheContract
      */
     protected function getFileStream($url, $context = null)
     {
-        // Escape special characters (e.g. spaces) that may occur in parts of the URL.
+        // Escape special characters (e.g. spaces) that may occur in parts of a HTTP URL.
         // Do not escape the URL as a whole because ':' or '/' would be escaped, too.
-        list($protocol, $url) = explode('://', $url);
-        $url = implode('/', array_map('rawurlencode', explode('/', $url)));
-        $url = "{$protocol}://{$url}";
+        if (strpos($url, 'http') === 0) {
+            list($protocol, $url) = explode('://', $url);
+            $url = implode('/', array_map('rawurlencode', explode('/', $url)));
+            $url = "{$protocol}://{$url}";
+        }
 
         if (is_resource($context)) {
             return @fopen($url, 'r', false, $context);
