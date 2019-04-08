@@ -504,8 +504,11 @@ class FileCache implements FileCacheContract
         // Do not escape the URL as a whole because ':' or '/' would be escaped, too.
         if (strpos($url, 'http') === 0) {
             list($protocol, $url) = explode('://', $url);
-            $url = implode('/', array_map('rawurlencode', explode('/', $url)));
-            $url = "{$protocol}://{$url}";
+            $urlParts = explode('/', $url);
+            // This part may contain "@" or ":" which should not be escaped.
+            $domain = array_shift($urlParts);
+            $path = implode('/', array_map('rawurlencode', $urlParts));
+            $url = "{$protocol}://{$domain}/{$path}";
         }
 
         if (is_resource($context)) {
