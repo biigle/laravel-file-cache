@@ -419,6 +419,10 @@ class FileCache implements FileCacheContract
 
         // Files from the local driver are not cached.
         if ($adapter instanceof Local) {
+            if (!$disk->exists($url[1])) {
+                throw new Exception("File does not exist.");
+            }
+
             return $adapter->getPathPrefix().$url[1];
         }
 
