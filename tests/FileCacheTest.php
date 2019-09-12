@@ -267,20 +267,20 @@ class FileCacheTest extends TestCase
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/def"));
     }
 
-     public function testClear()
-     {
-         $this->app['files']->put("{$this->cachePath}/abc", 'abc');
-         $this->app['files']->put("{$this->cachePath}/def", 'abc');
-         $handle = fopen("{$this->cachePath}/def", 'r');
-         flock($handle, LOCK_SH);
-         (new FileCache(['path' => $this->cachePath]))->clear();
-         fclose($handle);
-         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/def"));
-         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
-     }
+    public function testClear()
+    {
+        $this->app['files']->put("{$this->cachePath}/abc", 'abc');
+        $this->app['files']->put("{$this->cachePath}/def", 'abc');
+        $handle = fopen("{$this->cachePath}/def", 'r');
+        flock($handle, LOCK_SH);
+        (new FileCache(['path' => $this->cachePath]))->clear();
+        fclose($handle);
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/def"));
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
+    }
 
-     public function testMimeTypeWhitelist()
-     {
+    public function testMimeTypeWhitelist()
+    {
         $cache = new FileCache([
             'path' => $this->cachePath,
             'mime_types' => ['image/jpeg'],
@@ -293,7 +293,7 @@ class FileCacheTest extends TestCase
         } catch (Exception $e) {
             $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
         }
-     }
+    }
 }
 
 class FileCacheStub extends FileCache

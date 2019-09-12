@@ -8,11 +8,11 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 class TestCase extends BaseTestCase
 {
-   /**
-     * Boots the application.
-     *
-     * @return \Illuminate\Foundation\Application
-     */
+    /**
+      * Boots the application.
+      *
+      * @return \Illuminate\Foundation\Application
+      */
     public function createApplication()
     {
         // We create a full Laravel app here for testing purposes. The FileCache
