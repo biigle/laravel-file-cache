@@ -4,7 +4,7 @@ Fetch and cache files from local filesystem, cloud storage or public webservers 
 
 The file cache is specifically designed for use in concurrent processing with multiple parallel queue workers.
 
-[![Build Status](https://api.travis-ci.org/biigle/laravel-file-cache.svg)](https://travis-ci.org/biigle/laravel-file-cache)
+[![Build Status](https://api.travis-ci.org/biigle/laravel-file-cache.svg)](https://travis-ci.org/biigle/laravel-file-cache?branch=laravel-5)
 
 ## Installation
 
