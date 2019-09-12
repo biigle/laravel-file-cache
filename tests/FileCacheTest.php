@@ -19,6 +19,7 @@ class FileCacheTest extends TestCase
             return $path;
         };
         $this->app['files']->makeDirectory($this->cachePath, 0755, false, true);
+        $this->app['files']->makeDirectory($this->diskPath, 0755, false, true);
 
         config(['filesystems.disks.test' => [
             'driver' => 'local',
@@ -98,11 +99,25 @@ class FileCacheTest extends TestCase
 
     public function testGetDiskLocal()
     {
+        $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
         $file = new GenericFile('test://test-image.jpg');
         $cache = new FileCache(['path' => $this->cachePath]);
 
         $path = $cache->get($file, $this->noop);
         $this->assertEquals($this->diskPath.'/test-image.jpg', $path);
+    }
+
+    public function testGetDiskLocalDoesNotExist()
+    {
+        $file = new GenericFile('test://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        try {
+            $cache->get($file, $this->noop);
+            $this->assertTrue(false);
+        } catch (Exception $e) {
+            $this->assertStringContainsString("File does not exist.", $e->getMessage());
+        }
     }
 
     public function testGetDiskCloud()
@@ -207,6 +222,7 @@ class FileCacheTest extends TestCase
 
     public function testBatch()
     {
+        $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
         $file = new GenericFile('test://test-image.jpg');
         $file2 = new GenericFile('test://test-image.jpg');
 
