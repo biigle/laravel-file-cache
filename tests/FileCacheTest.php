@@ -10,7 +10,7 @@ use Biigle\FileCache\Contracts\File;
 
 class FileCacheTest extends TestCase
 {
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
         $this->cachePath = sys_get_temp_dir().'/biigle_file_cache_test';
@@ -31,7 +31,7 @@ class FileCacheTest extends TestCase
         ]]);
     }
 
-    public function tearDown()
+    public function tearDown(): void
     {
         $this->app['files']->deleteDirectory($this->cachePath);
         $this->app['files']->deleteDirectory($this->diskPath);
@@ -92,7 +92,7 @@ class FileCacheTest extends TestCase
             $cache->get($file, $this->noop);
             $this->assertTrue(false);
         } catch (Exception $e) {
-            $this->assertContains("disk 'abc' does not exist", $e->getMessage());
+            $this->assertStringContainsString("disk 'abc' does not exist", $e->getMessage());
         }
     }
 
@@ -216,8 +216,8 @@ class FileCacheTest extends TestCase
         });
 
         $this->assertCount(2, $paths);
-        $this->assertContains('test-image.jpg', $paths[0]);
-        $this->assertContains('test-image.jpg', $paths[1]);
+        $this->assertStringContainsString('test-image.jpg', $paths[0]);
+        $this->assertStringContainsString('test-image.jpg', $paths[1]);
     }
 
     public function testBatchOnce()
@@ -291,7 +291,7 @@ class FileCacheTest extends TestCase
             $cache->get(new GenericFile('fixtures://test-file.txt'), $this->noop);
             $this->assertTrue(false);
         } catch (Exception $e) {
-            $this->assertContains("type 'text/plain' not allowed", $e->getMessage());
+            $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
         }
      }
 }
