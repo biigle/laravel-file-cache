@@ -74,4 +74,13 @@ interface FileCache
      * Delete all unused cached files.
      */
     public function clear();
+
+    /**
+     * Check if a file exists.
+     *
+     * @param File $file
+     *
+     * @return bool Whether the file exists or not.
+     */
+    public function exists(File $file);
 }

@@ -310,6 +310,37 @@ class FileCacheTest extends TestCase
             $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
         }
     }
+
+    public function testExistsDisk()
+    {
+        $file = new GenericFile('test://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $this->assertFalse($cache->exists($file));
+        $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
+        $this->assertTrue($cache->exists($file));
+    }
+
+    public function testExistsRemote404()
+    {
+        $file = new GenericFile('https://httpbin.org/status/404');
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $this->assertFalse($cache->exists($file));
+    }
+
+    public function testExistsRemote500()
+    {
+        $file = new GenericFile('https://httpbin.org/status/500');
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $this->assertFalse($cache->exists($file));
+    }
+
+    public function testExistsRemote200()
+    {
+        $file = new GenericFile('https://httpbin.org/status/200');
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $this->assertTrue($cache->exists($file));
+    }
 }
 
 class FileCacheStub extends FileCache

@@ -56,6 +56,23 @@ class FileCache implements FileCacheContract
     /**
      * {@inheritdoc}
      */
+    public function exists(File $file)
+    {
+        if ($this->isRemote($file)) {
+            $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
+            $status = get_headers($file->getUrl(), 0, $context)[0];
+
+            return explode(' ', $status)[1][0] === '2';
+        }
+
+        $url = explode('://', $file->getUrl());
+
+        return $this->getDisk($file)->exists($url[1]);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function get(File $file, callable $callback)
     {
         return $this->batch([$file], function ($files, $paths) use ($callback) {
@@ -409,12 +426,7 @@ class FileCache implements FileCacheContract
     protected function getDiskFile(File $file, $target)
     {
         $url = explode('://', $file->getUrl());
-
-        if (!config("filesystems.disks.{$url[0]}")) {
-            throw new Exception("Storage disk '{$url[0]}' does not exist.");
-        }
-
-        $disk = $this->storage->disk($url[0]);
+        $disk = $this->getDisk($file);
         $adapter = $disk->getDriver()->getAdapter();
 
         // Files from the local driver are not cached.
@@ -531,5 +543,23 @@ class FileCache implements FileCacheContract
     protected function isRemote(File $file)
     {
         return strpos($file->getUrl(), 'http') === 0;
+    }
+
+    /**
+     * Get the storage disk on which a file is stored.
+     *
+     * @param File $file
+     *
+     * @return \Illuminate\Contracts\Filesystem\Filesystem
+     */
+    protected function getDisk(File $file)
+    {
+        $url = explode('://', $file->getUrl());
+
+        if (!config("filesystems.disks.{$url[0]}")) {
+            throw new Exception("Storage disk '{$url[0]}' does not exist.");
+        }
+
+        return $this->storage->disk($url[0]);
     }
 }

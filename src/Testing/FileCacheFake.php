@@ -84,4 +84,12 @@ class FileCacheFake implements FileCacheContract
     {
         //
     }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function exists(File $file)
+    {
+        return false;
+    }
 }
