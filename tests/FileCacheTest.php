@@ -10,7 +10,7 @@ use Biigle\FileCache\Contracts\File;
 
 class FileCacheTest extends TestCase
 {
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
         $this->cachePath = sys_get_temp_dir().'/biigle_file_cache_test';
@@ -32,7 +32,7 @@ class FileCacheTest extends TestCase
         ]]);
     }
 
-    public function tearDown()
+    public function tearDown(): void
     {
         $this->app['files']->deleteDirectory($this->cachePath);
         $this->app['files']->deleteDirectory($this->diskPath);

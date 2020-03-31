@@ -10,7 +10,7 @@ use Biigle\FileCache\Facades\FileCache as FileCacheFacade;
 
 class FileCacheTest extends TestCase
 {
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
         if (!class_exists(FileCache::class)) {
