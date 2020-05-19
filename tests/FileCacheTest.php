@@ -321,6 +321,40 @@ class FileCacheTest extends TestCase
         $this->assertTrue($cache->exists($file));
     }
 
+    public function testExistsDiskTooLarge()
+    {
+        $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
+        $file = new GenericFile('test://test-image.jpg');
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_file_size' => 1,
+        ]);
+
+        try {
+            $cache->exists($file);
+            $this->assertTrue(false);
+        } catch (Exception $e) {
+            $this->assertStringContainsString("too large", $e->getMessage());
+        }
+    }
+
+    public function testExistsDiskMimeNotAllowed()
+    {
+        $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
+        $file = new GenericFile('test://test-image.jpg');
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'mime_types' => ['image/jpeg'],
+        ]);
+
+        try {
+            $cache->exists($file);
+            $this->assertTrue(false);
+        } catch (Exception $e) {
+            $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
+        }
+    }
+
     public function testExistsRemote404()
     {
         $file = new GenericFile('https://httpbin.org/status/404');
@@ -340,6 +374,38 @@ class FileCacheTest extends TestCase
         $file = new GenericFile('https://httpbin.org/status/200');
         $cache = new FileCache(['path' => $this->cachePath]);
         $this->assertTrue($cache->exists($file));
+    }
+
+    public function testExistsRemoteTooLarge()
+    {
+        $file = new GenericFile('https://httpbin.org/get');
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_file_size' => 1,
+        ]);
+
+        try {
+            $cache->exists($file);
+            $this->assertTrue(false);
+        } catch (Exception $e) {
+            $this->assertStringContainsString("too large", $e->getMessage());
+        }
+    }
+
+    public function testExistsRemoteMimeNotAllowed()
+    {
+        $file = new GenericFile('https://httpbin.org/json');
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'mime_types' => ['image/jpeg'],
+        ]);
+
+        try {
+            $cache->exists($file);
+            $this->assertTrue(false);
+        } catch (Exception $e) {
+            $this->assertStringContainsString("type 'application/json' not allowed", $e->getMessage());
+        }
     }
 }
 

@@ -59,15 +59,10 @@ class FileCache implements FileCacheContract
     public function exists(File $file)
     {
         if ($this->isRemote($file)) {
-            $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
-            $status = get_headers($file->getUrl(), 0, $context)[0];
-
-            return explode(' ', $status)[1][0] === '2';
+            return $this->existsRemote($file);
         }
 
-        $url = explode('://', $file->getUrl());
-
-        return $this->getDisk($file)->exists($url[1]);
+        return $this->existsDisk($file);
     }
 
     /**
@@ -249,6 +244,74 @@ class FileCache implements FileCacheContract
         foreach ($files as $file) {
             $this->delete($file);
         }
+    }
+
+    /**
+     * Check for existence of a remte file.
+     *
+     * @param File $file
+     *
+     * @return bool
+     */
+    protected function existsRemote($file) {
+        $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
+        $headers = get_headers($file->getUrl(), 1, $context);
+
+        $exists = explode(' ', $headers[0])[1][0] === '2';
+
+        if (!$exists) {
+            return false;
+        }
+
+        if (!empty($this->config['mime_types'])) {
+            $type = $headers['Content-Type'];
+            if (!in_array($type, $this->config['mime_types'])) {
+                throw new Exception("MIME type '{$type}' not allowed.");
+            }
+        }
+
+        $maxBytes = intval($this->config['max_file_size']);
+        $size = intval($headers['Content-Length']);
+
+        if ($maxBytes >= 0 && $size > $maxBytes) {
+            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+        }
+
+        return true;
+    }
+
+    /**
+     * Check for existence of a file from a storage disk.
+     *
+     * @param File $file
+     *
+     * @return bool
+     */
+    protected function existsDisk($file) {
+        $url = explode('://', $file->getUrl());
+        $exists = $this->getDisk($file)->exists($url[1]);
+
+        if (!$exists) {
+            return false;
+        }
+
+        if (!empty($this->config['mime_types'])) {
+            $type = $this->getDisk($file)->mimeType($url[1]);
+            if (!in_array($type, $this->config['mime_types'])) {
+                throw new Exception("MIME type '{$type}' not allowed.");
+            }
+        }
+
+        $maxBytes = intval($this->config['max_file_size']);
+
+        if ($maxBytes >= 0) {
+            $size = $this->getDisk($file)->size($url[1]);
+            if ($size > $maxBytes) {
+                throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+            }
+        }
+
+        return true;
     }
 
     /**
