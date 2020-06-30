@@ -8,8 +8,6 @@ class ClearFileCache
 {
     /**
      * Handle the event.
-     *
-     * @param FileCache $cache
      */
     public function handle()
     {
