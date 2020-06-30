@@ -91,7 +91,7 @@ class FileCacheTest extends TestCase
 
         try {
             $cache->get($file, $this->noop);
-            $this->assertTrue(false);
+            $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
             $this->assertStringContainsString("disk 'abc' does not exist", $e->getMessage());
         }
@@ -114,7 +114,7 @@ class FileCacheTest extends TestCase
 
         try {
             $cache->get($file, $this->noop);
-            $this->assertTrue(false);
+            $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
             $this->assertStringContainsString("File does not exist.", $e->getMessage());
         }
@@ -305,7 +305,7 @@ class FileCacheTest extends TestCase
 
         try {
             $cache->get(new GenericFile('fixtures://test-file.txt'), $this->noop);
-            $this->assertTrue(false);
+            $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
             $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
         }
@@ -332,7 +332,7 @@ class FileCacheTest extends TestCase
 
         try {
             $cache->exists($file);
-            $this->assertTrue(false);
+            $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
             $this->assertStringContainsString("too large", $e->getMessage());
         }
@@ -349,7 +349,7 @@ class FileCacheTest extends TestCase
 
         try {
             $cache->exists($file);
-            $this->assertTrue(false);
+            $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
             $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
         }
@@ -386,7 +386,7 @@ class FileCacheTest extends TestCase
 
         try {
             $cache->exists($file);
-            $this->assertTrue(false);
+            $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
             $this->assertStringContainsString("too large", $e->getMessage());
         }
@@ -402,7 +402,7 @@ class FileCacheTest extends TestCase
 
         try {
             $cache->exists($file);
-            $this->assertTrue(false);
+            $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
             $this->assertStringContainsString("type 'application/json' not allowed", $e->getMessage());
         }
