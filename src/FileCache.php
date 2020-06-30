@@ -264,7 +264,7 @@ class FileCache implements FileCacheContract
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = $headers['Content-Type'];
+            $type = trim(explode(';', $headers['Content-Type'])[0]);
             if (!in_array($type, $this->config['mime_types'])) {
                 throw new Exception("MIME type '{$type}' not allowed.");
             }
