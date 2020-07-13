@@ -2,8 +2,8 @@
 
 namespace Biigle\FileCache\Tests;
 
-use Illuminate\Contracts\Console\Kernel;
 use Biigle\FileCache\FileCacheServiceProvider;
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 class TestCase extends BaseTestCase

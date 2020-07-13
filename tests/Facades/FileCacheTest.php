@@ -2,11 +2,11 @@
 
 namespace Biigle\FileCache\Tests\Facades;
 
-use FileCache;
+use Biigle\FileCache\Facades\FileCache as FileCacheFacade;
+use Biigle\FileCache\FileCache as BaseFileCache;
 use Biigle\FileCache\GenericFile;
 use Biigle\FileCache\Tests\TestCase;
-use Biigle\FileCache\FileCache as BaseFileCache;
-use Biigle\FileCache\Facades\FileCache as FileCacheFacade;
+use FileCache;
 
 class FileCacheTest extends TestCase
 {

@@ -2,8 +2,8 @@
 
 namespace Biigle\FileCache\Facades;
 
-use Illuminate\Support\Facades\Facade;
 use Biigle\FileCache\Testing\FileCacheFake;
+use Illuminate\Support\Facades\Facade;
 
 class FileCache extends Facade
 {

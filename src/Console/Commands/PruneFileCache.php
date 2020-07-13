@@ -2,8 +2,8 @@
 
 namespace Biigle\FileCache\Console\Commands;
 
-use Illuminate\Console\Command;
 use Biigle\FileCache\FileCache;
+use Illuminate\Console\Command;
 
 class PruneFileCache extends Command
 {

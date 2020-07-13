@@ -2,15 +2,15 @@
 
 namespace Biigle\FileCache;
 
-use Exception;
-use SplFileInfo;
-use League\Flysystem\Adapter\Local;
-use Symfony\Component\Finder\Finder;
 use Biigle\FileCache\Contracts\File;
-use Illuminate\Filesystem\Filesystem;
-use League\Flysystem\FileNotFoundException;
-use Illuminate\Filesystem\FilesystemManager;
 use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
+use Exception;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Filesystem\FilesystemManager;
+use League\Flysystem\Adapter\Local;
+use League\Flysystem\FileNotFoundException;
+use SplFileInfo;
+use Symfony\Component\Finder\Finder;
 
 /**
  * The file cache.
@@ -253,7 +253,8 @@ class FileCache implements FileCacheContract
      *
      * @return bool
      */
-    protected function existsRemote($file) {
+    protected function existsRemote($file)
+    {
         $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
         $headers = get_headers($file->getUrl(), 1, $context);
 
@@ -287,7 +288,8 @@ class FileCache implements FileCacheContract
      *
      * @return bool
      */
-    protected function existsDisk($file) {
+    protected function existsDisk($file)
+    {
         $url = explode('://', $file->getUrl());
         $exists = $this->getDisk($file)->exists($url[1]);
 
