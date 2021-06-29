@@ -1,10 +1,11 @@
 # File Cache
 
+
 Fetch and cache files from local filesystem, cloud storage or public webservers in Laravel or Lumen.
 
 The file cache is specifically designed for use in concurrent processing with multiple parallel queue workers.
 
-[![Build Status](https://api.travis-ci.org/biigle/laravel-file-cache.svg)](https://travis-ci.org/biigle/laravel-file-cache)
+[![Tests](https://github.com/biigle/laravel-file-cache/actions/workflows/tests.yml/badge.svg)](https://github.com/biigle/laravel-file-cache/actions/workflows/tests.yml)
 
 ## Installation
 

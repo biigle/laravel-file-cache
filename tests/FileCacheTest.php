@@ -47,13 +47,14 @@ class FileCacheTest extends TestCase
 
         $path = "{$this->cachePath}/{$hash}";
         $this->assertTrue(touch($path, time() - 1));
-        $this->assertNotEquals(time(), fileatime($path));
+        $fileatime = fileatime($path);
+        $this->assertNotEquals(time(), $fileatime);
         $file = $cache->get($file, function ($file, $path) {
             return $file;
         });
         $this->assertInstanceof(File::class, $file);
         clearstatcache();
-        $this->assertEquals(time(), fileatime($path));
+        $this->assertNotEquals($fileatime, fileatime($path));
     }
 
     public function testGetRemote()
