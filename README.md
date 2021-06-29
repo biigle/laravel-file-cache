@@ -1,5 +1,7 @@
 # File Cache
 
+[![Tests](https://github.com/biigle/laravel-file-cache/actions/workflows/tests.yml/badge.svg)](https://github.com/biigle/laravel-file-cache/actions/workflows/tests.yml)
+
 Fetch and cache files from local filesystem, cloud storage or public webservers in Laravel or Lumen.
 
 The file cache is specifically designed for use in concurrent processing with multiple parallel queue workers.
