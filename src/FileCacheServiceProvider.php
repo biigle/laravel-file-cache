@@ -2,11 +2,11 @@
 
 namespace Biigle\FileCache;
 
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Contracts\Events\Dispatcher;
-use Illuminate\Console\Scheduling\Schedule;
-use Biigle\FileCache\Listeners\ClearFileCache;
 use Biigle\FileCache\Console\Commands\PruneFileCache;
+use Biigle\FileCache\Listeners\ClearFileCache;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Support\ServiceProvider;
 
 class FileCacheServiceProvider extends ServiceProvider
 {

@@ -3,8 +3,8 @@
 namespace Biigle\FileCache\Testing;
 
 use Biigle\FileCache\Contracts\File;
-use Illuminate\Filesystem\Filesystem;
 use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
+use Illuminate\Filesystem\Filesystem;
 
 class FileCacheFake implements FileCacheContract
 {

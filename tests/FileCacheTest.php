@@ -2,11 +2,11 @@
 
 namespace Biigle\FileCache\Tests;
 
-use Mockery;
-use Exception;
+use Biigle\FileCache\Contracts\File;
 use Biigle\FileCache\FileCache;
 use Biigle\FileCache\GenericFile;
-use Biigle\FileCache\Contracts\File;
+use Exception;
+use Mockery;
 
 class FileCacheTest extends TestCase
 {

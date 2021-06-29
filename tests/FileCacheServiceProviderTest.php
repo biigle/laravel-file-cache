@@ -3,8 +3,8 @@
 namespace Biigle\FileCache\Tests;
 
 use Biigle\FileCache\FileCache;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Event;
 
 class FileCacheServiceProviderTest extends TestCase
 {
