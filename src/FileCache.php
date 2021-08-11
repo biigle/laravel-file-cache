@@ -257,6 +257,7 @@ class FileCache implements FileCacheContract
     {
         $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
         $headers = get_headers($file->getUrl(), 1, $context);
+        $headers = array_change_key_case($headers, CASE_LOWER);
 
         $exists = explode(' ', $headers[0])[1][0] === '2';
 
@@ -265,14 +266,14 @@ class FileCache implements FileCacheContract
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = trim(explode(';', $headers['Content-Type'])[0]);
+            $type = trim(explode(';', $headers['content-type'])[0]);
             if (!in_array($type, $this->config['mime_types'])) {
                 throw new Exception("MIME type '{$type}' not allowed.");
             }
         }
 
         $maxBytes = intval($this->config['max_file_size']);
-        $size = intval($headers['Content-Length']);
+        $size = intval($headers['content-length']);
 
         if ($maxBytes >= 0 && $size > $maxBytes) {
             throw new Exception("The file is too large with more than {$maxBytes} bytes.");
