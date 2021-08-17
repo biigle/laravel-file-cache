@@ -540,7 +540,9 @@ class FileCache implements FileCacheContract
             throw new Exception('The source resource is invalid.');
         }
 
-        if (stream_get_meta_data($source)['timed_out']) {
+        $metadata = stream_get_meta_data($source);
+
+        if (array_key_exists('timed_out', $metadata) && $metadata['timed_out']) {
             throw new Exception('The source stream timed out while reading data.');
         }
 
