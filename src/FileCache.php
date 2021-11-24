@@ -256,7 +256,8 @@ class FileCache implements FileCacheContract
     protected function existsRemote($file)
     {
         $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
-        $headers = get_headers($file->getUrl(), 1, $context);
+        $url = $this->encodeUrl($file->getUrl());
+        $headers = get_headers($url, 1, $context);
         $headers = array_change_key_case($headers, CASE_LOWER);
 
         $exists = explode(' ', $headers[0])[1][0] === '2';
@@ -588,10 +589,7 @@ class FileCache implements FileCacheContract
         // We do not use urlencode or rawurlencode because they encode some characters
         // (e.g. "+") that should not be changed in the URL.
         if (strpos($url, 'http') === 0) {
-            // List of characters to substitute and their replacements at the same index.
-            $pattern = [' '];
-            $replacement = ['%20'];
-            $url = str_replace($pattern, $replacement, $url);
+            $url = $this->encodeUrl($url);
         }
 
         if (is_resource($context)) {
@@ -629,5 +627,23 @@ class FileCache implements FileCacheContract
         }
 
         return $this->storage->disk($url[0]);
+    }
+
+    /**
+     * Escape special characters (e.g. spaces) that may occur in parts of a HTTP URL.
+     * We do not use urlencode or rawurlencode because they encode some characters
+     * (e.g. "+") that should not be changed in the URL.
+     *
+     * @param string $url
+     *
+     * @return string
+     */
+    protected function encodeUrl($url)
+    {
+        // List of characters to substitute and their replacements at the same index.
+        $pattern = [' '];
+        $replacement = ['%20'];
+
+        return str_replace($pattern, $replacement, $url);
     }
 }
