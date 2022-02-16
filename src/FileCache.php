@@ -7,8 +7,6 @@ use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
 use Exception;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
-use League\Flysystem\Adapter\Local;
-use League\Flysystem\FileNotFoundException;
 use SplFileInfo;
 use Symfony\Component\Finder\Finder;
 
@@ -110,11 +108,13 @@ class FileCache implements FileCacheContract
             throw new Exception("Storage disk '{$url[0]}' does not exist.");
         }
 
-        try {
-            return $this->storage->disk($url[0])->readStream($url[1]);
-        } catch (FileNotFoundException $e) {
-            throw new Exception($e->getMessage());
+        $stream = $this->storage->disk($url[0])->readStream($url[1]);
+
+        if (is_null($stream)) {
+            throw new Exception('File does not exist.');
         }
+
+        return $stream;
     }
 
     /**
@@ -494,18 +494,12 @@ class FileCache implements FileCacheContract
     {
         $url = explode('://', $file->getUrl());
         $disk = $this->getDisk($file);
-        $adapter = $disk->getDriver()->getAdapter();
-
-        // Files from the local driver are not cached.
-        if ($adapter instanceof Local) {
-            if (!$disk->exists($url[1])) {
-                throw new Exception("File does not exist.");
-            }
-
-            return $adapter->getPathPrefix().$url[1];
-        }
 
         $source = $disk->readStream($url[1]);
+        if (is_null($source)) {
+            throw new Exception('File does not exist.');
+        }
+
         $cachedPath = $this->cacheFromResource($file, $source, $target);
         if (is_resource($source)) {
             fclose($source);
