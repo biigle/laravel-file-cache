@@ -104,11 +104,9 @@ class FileCache implements FileCacheContract
 
         $url = explode('://', $file->getUrl());
 
-        if (!config("filesystems.disks.{$url[0]}")) {
-            throw new Exception("Storage disk '{$url[0]}' does not exist.");
-        }
-
-        $stream = $this->storage->disk($url[0])->readStream($url[1]);
+        // Throws an exception if the disk does not exist.
+        $disk = $this->storage->disk($url[0]);
+        $stream = $disk->readStream($url[1]);
 
         if (is_null($stream)) {
             throw new Exception('File does not exist.');
@@ -616,10 +614,7 @@ class FileCache implements FileCacheContract
     {
         $url = explode('://', $file->getUrl());
 
-        if (!config("filesystems.disks.{$url[0]}")) {
-            throw new Exception("Storage disk '{$url[0]}' does not exist.");
-        }
-
+        // Throws an exception if the disk does not exist.
         return $this->storage->disk($url[0]);
     }
 

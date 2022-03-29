@@ -94,7 +94,7 @@ class FileCacheTest extends TestCase
             $cache->get($file, $this->noop);
             $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
-            $this->assertStringContainsString("disk 'abc' does not exist", $e->getMessage());
+            $this->assertStringContainsString("Disk [abc] does not have a configured driver", $e->getMessage());
         }
     }
 
