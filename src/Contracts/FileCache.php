@@ -10,7 +10,7 @@ interface FileCache
      * operations.
      *
      * @param \Biigle\FileCache\Contracts\File $file
-     * @param callable $callback Gets the file object and the path to the cached file
+     * @param callable(\Biigle\FileCache\Contracts\File, string): mixed $callback Gets the file object and the path to the cached file
      * file as arguments.
      *
      * @return mixed Result of the callback.
@@ -22,7 +22,7 @@ interface FileCache
      * else).
      *
      * @param \Biigle\FileCache\Contracts\File $file
-     * @param callable $callback Gets the file object and the path to the cached file
+     * @param callable(\Biigle\FileCache\Contracts\File, string): mixed $callback $callback Gets the file object and the path to the cached file
      * file as arguments.
      *
      * @return mixed Result of the callback.
@@ -46,7 +46,7 @@ interface FileCache
      * pruning of the files while they are processed.
      *
      * @param \Biigle\FileCache\Contracts\File[] $files
-     * @param callable $callback Gets the array of file objects and the array of paths
+     * @param callable(\Biigle\FileCache\Contracts\File[], string[]): mixed $callback $callback Gets the array of file objects and the array of paths
      * to the cached file files (in the same ordering) as arguments.
      *
      * @return mixed Result of the callback.
@@ -58,7 +58,7 @@ interface FileCache
      * somewhere else).
      *
      * @param \Biigle\FileCache\Contracts\File[] $files
-     * @param callable $callback Gets the array of file objects and the array of paths
+     * @param callable(\Biigle\FileCache\Contracts\File[], string[]): mixed $callback Gets the array of file objects and the array of paths
      * to the cached file files (in the same ordering) as arguments.
      *
      * @return mixed Result of the callback.
