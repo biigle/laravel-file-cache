@@ -2,14 +2,12 @@
 
 namespace Biigle\FileCache\Listeners;
 
-use Biigle\FileCache\FileCache;
-
 class ClearFileCache
 {
     /**
      * Handle the event.
      */
-    public function handle()
+    public function handle(): void
     {
         app('file-cache')->clear();
     }

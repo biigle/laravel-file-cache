@@ -9,6 +9,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\FileNotFoundException;
+use RuntimeException;
 use SplFileInfo;
 use Symfony\Component\Finder\Finder;
 
@@ -17,36 +18,14 @@ use Symfony\Component\Finder\Finder;
  */
 class FileCache implements FileCacheContract
 {
-
-    /**
-     * File cache configuration.
-     *
-     * @var array
-     */
-    protected $config;
-
-    /**
-     * The Filesytem instance to use
-     *
-     * @var Filesystem
-     */
-    protected $files;
-
-    /**
-     * File FilesystemManager instance to use
-     *
-     * @var FilesystemManager
-     */
-    protected $storage;
-
     /**
      * Create an instance.
-     *
-     * @param array $config Optional custom configuration.
-     * @param Filesystem $files
-     * @param FilesystemManager $storage
      */
-    public function __construct(array $config = [], $files = null, $storage = null)
+    public function __construct(
+        protected array $config = [],
+        protected ?Filesystem $files = null,
+        protected ?FilesystemManager $storage = null
+    )
     {
         $this->config = array_merge(config('file-cache'), $config);
         $this->files = $files ?: app('files');
@@ -56,7 +35,7 @@ class FileCache implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function exists(File $file)
+    public function exists(File $file): bool
     {
         if ($this->isRemote($file)) {
             return $this->existsRemote($file);
@@ -71,7 +50,7 @@ class FileCache implements FileCacheContract
     public function get(File $file, callable $callback)
     {
         return $this->batch([$file], function ($files, $paths) use ($callback) {
-            return call_user_func($callback, $files[0], $paths[0]);
+            return $callback($files[0], $paths[0]);
         });
     }
 
@@ -81,7 +60,7 @@ class FileCache implements FileCacheContract
     public function getOnce(File $file, callable $callback)
     {
         return $this->batchOnce([$file], function ($files, $paths) use ($callback) {
-            return call_user_func($callback, $files[0], $paths[0]);
+            return $callback($files[0], $paths[0]);
         });
     }
 
@@ -104,16 +83,16 @@ class FileCache implements FileCacheContract
             return $this->getFileStream($cachedPath);
         }
 
-        $url = explode('://', $file->getUrl());
+        [$diskName, $path] = $this->splitUrlByPort($file->getUrl());
 
-        if (!config("filesystems.disks.{$url[0]}")) {
-            throw new Exception("Storage disk '{$url[0]}' does not exist.");
+        if (!config("filesystems.disks.{$diskName}")) {
+            throw new RuntimeException("Storage disk '{$diskName}' does not exist.");
         }
 
         try {
-            return $this->storage->disk($url[0])->readStream($url[1]);
+            return $this->storage->disk($diskName)->readStream($path);
         } catch (FileNotFoundException $e) {
-            throw new Exception($e->getMessage());
+            throw new RuntimeException($e->getMessage());
         }
     }
 
@@ -131,7 +110,7 @@ class FileCache implements FileCacheContract
         }, $retrieved);
 
         try {
-            $result = call_user_func($callback, $files, $paths);
+            $result = $callback($files, $paths);
         } finally {
             foreach ($retrieved as $file) {
                 fclose($file['handle']);
@@ -155,7 +134,7 @@ class FileCache implements FileCacheContract
         }, $retrieved);
 
         try {
-            $result = call_user_func($callback, $files, $paths);
+            $result = $callback($files, $paths);
         } finally {
             foreach ($retrieved as $index => $file) {
                 // Convert to exclusive lock for deletion. Don't delete if lock can't be
@@ -178,7 +157,7 @@ class FileCache implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function prune()
+    public function prune(): void
     {
         if (!$this->files->exists($this->config['path'])) {
             return;
@@ -229,7 +208,7 @@ class FileCache implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function clear()
+    public function clear(): void
     {
         if (!$this->files->exists($this->config['path'])) {
             return;
@@ -247,13 +226,11 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Check for existence of a remte file.
+     * Check for existence of a remote file.
      *
-     * @param File $file
-     *
-     * @return bool
+     * @throws Exception
      */
-    protected function existsRemote($file)
+    protected function existsRemote(File $file): bool
     {
         $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
         $url = $this->encodeUrl($file->getUrl());
@@ -268,16 +245,16 @@ class FileCache implements FileCacheContract
 
         if (!empty($this->config['mime_types'])) {
             $type = trim(explode(';', $headers['content-type'])[0]);
-            if (!in_array($type, $this->config['mime_types'])) {
-                throw new Exception("MIME type '{$type}' not allowed.");
+            if (!in_array($type, $this->config['mime_types'], true)) {
+                throw new RuntimeException("MIME type '{$type}' not allowed.");
             }
         }
 
-        $maxBytes = intval($this->config['max_file_size']);
-        $size = intval($headers['content-length']);
+        $maxBytes = (int)$this->config['max_file_size'];
+        $size = (int)$headers['content-length'];
 
         if ($maxBytes >= 0 && $size > $maxBytes) {
-            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+            throw new RuntimeException("The file is too large with more than {$maxBytes} bytes.");
         }
 
         return true;
@@ -286,32 +263,30 @@ class FileCache implements FileCacheContract
     /**
      * Check for existence of a file from a storage disk.
      *
-     * @param File $file
-     *
-     * @return bool
+     * @throws Exception
      */
-    protected function existsDisk($file)
+    protected function existsDisk(File $file): bool
     {
-        $url = explode('://', $file->getUrl());
-        $exists = $this->getDisk($file)->exists($url[1]);
+        [$port, $urlWithoutPort] = $this->splitUrlByPort($file->getUrl());
+        $exists = $this->getDisk($file)->exists($urlWithoutPort);
 
         if (!$exists) {
             return false;
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = $this->getDisk($file)->mimeType($url[1]);
-            if (!in_array($type, $this->config['mime_types'])) {
-                throw new Exception("MIME type '{$type}' not allowed.");
+            $type = $this->getDisk($file)->mimeType($urlWithoutPort);
+            if (!in_array($type, $this->config['mime_types'], true)) {
+                throw new RuntimeException("MIME type '{$type}' not allowed.");
             }
         }
 
-        $maxBytes = intval($this->config['max_file_size']);
+        $maxBytes = (int)$this->config['max_file_size'];
 
         if ($maxBytes >= 0) {
-            $size = $this->getDisk($file)->size($url[1]);
+            $size = $this->getDisk($file)->size($urlWithoutPort);
             if ($size > $maxBytes) {
-                throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+                throw new RuntimeException("The file is too large with more than {$maxBytes} bytes.");
             }
         }
 
@@ -319,15 +294,15 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Delete a cached file it it is not used.
+     * Delete a cached file if it is not used.
      *
      * @param SplFileInfo $file
      *
      * @return bool If the file has been deleted.
      */
-    protected function delete(SplFileInfo $file)
+    protected function delete(SplFileInfo $file): bool
     {
-        $handle = fopen($file->getRealPath(), 'r');
+        $handle = fopen($file->getRealPath(), 'rb');
         $deleted = false;
 
         try {
@@ -348,24 +323,23 @@ class FileCache implements FileCacheContract
      * the cached file. If the file is local, nothing will be done and the path to the
      * local file will be returned.
      *
-     * @param File $file File to get the path for
      * @throws Exception If the file could not be cached.
      *
      * @return array Containing the 'path' to the file and the file 'handle'. Close the
      * handle when finished.
      */
-    protected function retrieve(File $file)
+    protected function retrieve(File $file): array
     {
         $this->ensurePathExists();
         $cachedPath = $this->getCachedPath($file);
 
         // This will return false if the file already exists. Else it will create it in
         // read and write mode.
-        $handle = @fopen($cachedPath, 'x+');
+        $handle = @fopen($cachedPath, 'xb+');
 
         if ($handle === false) {
             // The file exists, get the file handle in read mode.
-            $handle = fopen($cachedPath, 'r');
+            $handle = fopen($cachedPath, 'rb');
             // Wait for any LOCK_EX that is set if the file is currently written.
             flock($handle, LOCK_SH);
 
@@ -393,7 +367,7 @@ class FileCache implements FileCacheContract
             // by 'nlink' === 0 above.
             @unlink($cachedPath);
             fclose($handle);
-            throw new Exception("Error while caching file '{$file->getUrl()}': {$e->getMessage()}");
+            throw new RuntimeException("Error while caching file '{$file->getUrl()}': {$e->getMessage()}");
         }
 
         return $fileInfo;
@@ -407,7 +381,7 @@ class FileCache implements FileCacheContract
      *
      * @return array
      */
-    protected function retrieveExistingFile($cachedPath, $handle)
+    protected function retrieveExistingFile(string $cachedPath, $handle): array
     {
         // Update access and modification time to signal that this cached file was
         // used recently.
@@ -425,10 +399,11 @@ class FileCache implements FileCacheContract
      * @param File $file
      * @param string $cachedPath
      * @param resource $handle
+     * @throws Exception
      *
      * @return array
      */
-    protected function retrieveNewFile(File $file, $cachedPath, $handle)
+    protected function retrieveNewFile(File $file, string $cachedPath, $handle): array
     {
         if ($this->isRemote($file)) {
             $this->getRemoteFile($file, $handle);
@@ -446,8 +421,8 @@ class FileCache implements FileCacheContract
 
         if (!empty($this->config['mime_types'])) {
             $type = $this->files->mimeType($cachedPath);
-            if (!in_array($type, $this->config['mime_types'])) {
-                throw new Exception("MIME type '{$type}' not allowed.");
+            if (!in_array($type, $this->config['mime_types'], true)) {
+                throw new RuntimeException("MIME type '{$type}' not allowed.");
             }
         }
 
@@ -481,7 +456,7 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Cache an file from a storage disk and get the path to the cached file. Files
+     * Cache a file from a storage disk and get the path to the cached file. Files
      * from local disks are not cached.
      *
      * @param File $file Cloud storage file
@@ -490,22 +465,22 @@ class FileCache implements FileCacheContract
      *
      * @return string
      */
-    protected function getDiskFile(File $file, $target)
+    protected function getDiskFile(File $file, $target): string
     {
-        $url = explode('://', $file->getUrl());
+        [$diskName, $path] = $this->splitUrlByPort($file->getUrl());
         $disk = $this->getDisk($file);
         $adapter = $disk->getDriver()->getAdapter();
 
         // Files from the local driver are not cached.
         if ($adapter instanceof Local) {
-            if (!$disk->exists($url[1])) {
-                throw new Exception("File does not exist.");
+            if (!$disk->exists($path)) {
+                throw new RuntimeException("File does not exist.");
             }
 
-            return $adapter->getPathPrefix().$url[1];
+            return $adapter->getPathPrefix().$path;
         }
 
-        $source = $disk->readStream($url[1]);
+        $source = $disk->readStream($path);
         $cachedPath = $this->cacheFromResource($file, $source, $target);
         if (is_resource($source)) {
             fclose($source);
@@ -527,25 +502,25 @@ class FileCache implements FileCacheContract
     protected function cacheFromResource(File $file, $source, $target)
     {
         if (!is_resource($source)) {
-            throw new Exception('The source resource could not be established.');
+            throw new RuntimeException('The source resource could not be established.');
         }
 
         $cachedPath = $this->getCachedPath($file);
-        $maxBytes = intval($this->config['max_file_size']);
+        $maxBytes = (int)$this->config['max_file_size'];
         $bytes = stream_copy_to_stream($source, $target, $maxBytes);
 
         if ($bytes === $maxBytes) {
-            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+            throw new RuntimeException("The file is too large with more than {$maxBytes} bytes.");
         }
 
         if ($bytes === false) {
-            throw new Exception('The source resource is invalid.');
+            throw new RuntimeException('The source resource is invalid.');
         }
 
         $metadata = stream_get_meta_data($source);
 
         if (array_key_exists('timed_out', $metadata) && $metadata['timed_out']) {
-            throw new Exception('The source stream timed out while reading data.');
+            throw new RuntimeException('The source stream timed out while reading data.');
         }
 
         return $cachedPath;
@@ -554,7 +529,7 @@ class FileCache implements FileCacheContract
     /**
      * Creates the cache directory if it doesn't exist yet.
      */
-    protected function ensurePathExists()
+    protected function ensurePathExists(): void
     {
         if (!$this->files->exists($this->config['path'])) {
             $this->files->makeDirectory($this->config['path'], 0755, true, true);
@@ -562,13 +537,9 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Get the path to the cached file file.
-     *
-     * @param File $file
-     *
-     * @return string
+     * Get the path to the cached file.
      */
-    protected function getCachedPath(File $file)
+    protected function getCachedPath(File $file): string
     {
         $hash = hash('sha256', $file->getUrl());
 
@@ -576,69 +547,66 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Get the stream resource for an file.
+     * Get the stream resource for a file.
      *
      * @param string $url
      * @param resource|null $context Stream context
      *
-     * @return resource
+     * @return resource|false
      */
-    protected function getFileStream($url, $context = null)
+    protected function getFileStream(string $url, $context = null)
     {
         // Escape special characters (e.g. spaces) that may occur in parts of a HTTP URL.
         // We do not use urlencode or rawurlencode because they encode some characters
         // (e.g. "+") that should not be changed in the URL.
-        if (strpos($url, 'http') === 0) {
+        if (str_starts_with($url, 'http')) {
             $url = $this->encodeUrl($url);
         }
 
         if (is_resource($context)) {
-            return @fopen($url, 'r', false, $context);
+            return @fopen($url, 'rb', false, $context);
         }
 
-        return @fopen($url, 'r');
+        return @fopen($url, 'rb');
     }
 
     /**
-     * Determine if an file is remote, i.e. served by a public webserver.
+     * Get the storage disk on which a file is stored.
+     */
+    protected function getDisk(File $file): \Illuminate\Contracts\Filesystem\Filesystem
+    {
+        [$diskName] = $this->splitUrlByPort($file->getUrl());
+
+        if (!config("filesystems.disks.{$diskName}")) {
+            throw new RuntimeException("Storage disk '{$diskName}' does not exist.");
+        }
+
+        return $this->storage->disk($diskName);
+    }
+
+    /**
+     * Determine if a file is remote, i.e. served by a public webserver.
      *
      * @param File $file
      *
      * @return boolean
      */
-    protected function isRemote(File $file)
+    protected function isRemote(File $file): bool
     {
-        return strpos($file->getUrl(), 'http') === 0;
+        return str_starts_with($file->getUrl(), 'http');
     }
 
-    /**
-     * Get the storage disk on which a file is stored.
-     *
-     * @param File $file
-     *
-     * @return \Illuminate\Contracts\Filesystem\Filesystem
-     */
-    protected function getDisk(File $file)
+    protected function splitUrlByPort(string $url): array
     {
-        $url = explode('://', $file->getUrl());
-
-        if (!config("filesystems.disks.{$url[0]}")) {
-            throw new Exception("Storage disk '{$url[0]}' does not exist.");
-        }
-
-        return $this->storage->disk($url[0]);
+        return explode('://', $url, 2);
     }
 
     /**
      * Escape special characters (e.g. spaces) that may occur in parts of a HTTP URL.
      * We do not use urlencode or rawurlencode because they encode some characters
      * (e.g. "+") that should not be changed in the URL.
-     *
-     * @param string $url
-     *
-     * @return string
      */
-    protected function encodeUrl($url)
+    protected function encodeUrl(string $url): string
     {
         // List of characters to substitute and their replacements at the same index.
         $pattern = [' '];

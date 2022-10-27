@@ -23,12 +23,8 @@ class PruneFileCache extends Command
 
     /**
      * Execute the console command.
-     *
-     * @param FileCache $cache
-     *
-     * @return mixed
      */
-    public function handle(FileCache $cache)
+    public function handle(FileCache $cache): void
     {
         $cache->prune();
     }

@@ -9,8 +9,6 @@ interface File
      *
      * This may be a remote URL starting with "http://" or "https://", or a storage disk
      * path starting with "[disk-name]://".
-     *
-     * @return string
      */
-    public function getUrl();
+    public function getUrl(): string;
 }

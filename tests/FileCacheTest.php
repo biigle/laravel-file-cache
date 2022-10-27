@@ -6,7 +6,8 @@ use Biigle\FileCache\Contracts\File;
 use Biigle\FileCache\FileCache;
 use Biigle\FileCache\GenericFile;
 use Exception;
-use Mockery;
+use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Filesystem\FilesystemManager;
 
 class FileCacheTest extends TestCase
 {
@@ -63,7 +64,7 @@ class FileCacheTest extends TestCase
         $hash = hash('sha256', 'https://files/image.jpg');
         $cache = new FileCacheStub(['path' => $this->cachePath]);
 
-        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'rb');
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
         $path = $cache->get($file, $this->noop);
         $this->assertEquals("{$this->cachePath}/{$hash}", $path);
@@ -79,7 +80,7 @@ class FileCacheTest extends TestCase
             'max_file_size' => 1,
         ]);
 
-        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'rb');
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('file is too large');
         $cache->get($file, $this->noop);
@@ -127,14 +128,14 @@ class FileCacheTest extends TestCase
         $file = new GenericFile('s3://files/test-image.jpg');
         $hash = hash('sha256', 's3://files/test-image.jpg');
 
-        $stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
-
-        $mock = Mockery::mock();
-        $mock->shouldReceive('disk')->once()->with('s3')->andReturn($mock);
-        $mock->shouldReceive('getDriver')->once()->andReturn($mock);
-        $mock->shouldReceive('getAdapter')->once()->andReturn($mock);
-        $mock->shouldReceive('readStream')->once()->andReturn($stream);
-        $this->app['filesystem'] = $mock;
+        $stream = fopen(__DIR__.'/files/test-image.jpg', 'rb');
+        $filesystemManagerMock = $this->createMock(FilesystemManager::class);
+        $filesystemMock = $this->createMock(FilesystemAdapter::class);
+        $filesystemMock->method('readStream')->willReturn($stream);
+        $filesystemMock->method('getDriver')->willReturn($filesystemMock);
+        $filesystemMock->method('get')->willReturn($filesystemMock);
+        $filesystemManagerMock->method('disk')->with('s3')->willReturn($filesystemMock);
+        $this->app['filesystem'] = $filesystemManagerMock;
 
         $cache = new FileCache(['path' => $this->cachePath]);
 
@@ -151,14 +152,15 @@ class FileCacheTest extends TestCase
         $file = new GenericFile('s3://files/test-image.jpg');
         $hash = hash('sha256', 's3://files/test-image.jpg');
 
-        $stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
+        $stream = fopen(__DIR__.'/files/test-image.jpg', 'rb');
 
-        $mock = Mockery::mock();
-        $mock->shouldReceive('disk')->once()->with('s3')->andReturn($mock);
-        $mock->shouldReceive('getDriver')->once()->andReturn($mock);
-        $mock->shouldReceive('getAdapter')->once()->andReturn($mock);
-        $mock->shouldReceive('readStream')->once()->andReturn($stream);
-        $this->app['filesystem'] = $mock;
+        $filesystemManagerMock = $this->createMock(FilesystemManager::class);
+        $filesystemMock = $this->createMock(FilesystemAdapter::class);
+        $filesystemMock->method('readStream')->willReturn($stream);
+        $filesystemMock->method('getDriver')->willReturn($filesystemMock);
+        $filesystemMock->method('get')->willReturn($filesystemMock);
+        $filesystemManagerMock->method('disk')->with('s3')->willReturn($filesystemMock);
+        $this->app['filesystem'] = $filesystemManagerMock;
 
         $cache = new FileCache([
             'path' => $this->cachePath,
@@ -288,7 +290,7 @@ class FileCacheTest extends TestCase
     {
         $this->app['files']->put("{$this->cachePath}/abc", 'abc');
         $this->app['files']->put("{$this->cachePath}/def", 'abc');
-        $handle = fopen("{$this->cachePath}/def", 'r');
+        $handle = fopen("{$this->cachePath}/def", 'rb');
         flock($handle, LOCK_SH);
         (new FileCache(['path' => $this->cachePath]))->clear();
         fclose($handle);

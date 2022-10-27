@@ -8,6 +8,8 @@ use Illuminate\Filesystem\Filesystem;
 
 class FileCacheFake implements FileCacheContract
 {
+    protected string $path;
+
     public function __construct()
     {
         (new Filesystem)->cleanDirectory(
@@ -23,7 +25,7 @@ class FileCacheFake implements FileCacheContract
     public function get(File $file, callable $callback)
     {
         return $this->batch([$file], function ($files, $paths) use ($callback) {
-            return call_user_func($callback, $files[0], $paths[0]);
+            return $callback($files[0], $paths[0]);
         });
     }
 
@@ -38,7 +40,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function getStream(File $file)
+    public function getStream(File $file): array
     {
         return [
             'stream' => null,
@@ -72,7 +74,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function prune()
+    public function prune(): void
     {
         //
     }
@@ -80,7 +82,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function clear()
+    public function clear(): void
     {
         //
     }
@@ -88,7 +90,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function exists(File $file)
+    public function exists(File $file): bool
     {
         return false;
     }

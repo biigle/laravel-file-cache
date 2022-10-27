@@ -8,7 +8,7 @@ return [
     'max_file_size' => env('FILE_CACHE_MAX_FILE_SIZE', -1),
 
     /*
-    | Maximum age in minutes of an file in the cache. Older files are pruned.
+    | Maximum age in minutes of a file in the cache. Older files are pruned.
     */
     'max_age' => env('FILE_CACHE_MAX_AGE', 60),
 

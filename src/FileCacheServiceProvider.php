@@ -12,12 +12,8 @@ class FileCacheServiceProvider extends ServiceProvider
 {
     /**
      * Bootstrap the application events.
-     *
-     * @param Dispatcher $events
-     *
-     * @return void
      */
-    public function boot(Dispatcher $events)
+    public function boot(Dispatcher $events): void
     {
         $this->publishes([
             __DIR__.'/config/file-cache.php' => base_path('config/file-cache.php'),
@@ -28,7 +24,7 @@ class FileCacheServiceProvider extends ServiceProvider
             // See: https://stackoverflow.com/a/36630136/1796523
             $this->app->booted([$this, 'registerScheduledPruneCommand']);
         } else {
-            // Lumen has no 'booted' method but it works without, too, for some reason.
+            // Lumen has no 'booted' method, but it works without, too, for some reason.
             $this->registerScheduledPruneCommand($this->app);
         }
 
@@ -38,10 +34,8 @@ class FileCacheServiceProvider extends ServiceProvider
 
     /**
      * Register the service provider.
-     *
-     * @return void
      */
-    public function register()
+    public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/config/file-cache.php', 'file-cache');
 
@@ -57,10 +51,8 @@ class FileCacheServiceProvider extends ServiceProvider
 
     /**
      * Get the services provided by the provider.
-     *
-     * @return array
      */
-    public function provides()
+    public function provides(): array
     {
         return [
             'command.file-cache.prune',
@@ -72,7 +64,7 @@ class FileCacheServiceProvider extends ServiceProvider
      *
      * @param mixed $app Laravel or Lumen application instance.
      */
-    public function registerScheduledPruneCommand($app)
+    public function registerScheduledPruneCommand($app): void
     {
         $app->make(Schedule::class)
             ->command(PruneFileCache::class)

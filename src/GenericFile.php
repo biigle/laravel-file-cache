@@ -8,24 +8,20 @@ class GenericFile implements File
 {
     /**
      * The file URL.
-     *
-     * @var string
      */
-    protected $url;
+    protected string $url;
 
     /**
      * Create a new instance.
-     *
-     * @param string $url
      */
-    public function __construct($url)
+    public function __construct(string $url)
     {
         $this->url = $url;
     }
     /**
      * {@inheritdoc}
      */
-    public function getUrl()
+    public function getUrl(): string
     {
         return $this->url;
     }
