@@ -34,6 +34,7 @@ class FileCache implements FileCacheContract
 
     /**
      * {@inheritdoc}
+     * @throws Exception
      */
     public function exists(File $file): bool
     {
@@ -98,6 +99,7 @@ class FileCache implements FileCacheContract
 
     /**
      * {@inheritdoc}
+     * @throws Exception
      */
     public function batch(array $files, callable $callback)
     {
@@ -105,7 +107,7 @@ class FileCache implements FileCacheContract
             return $this->retrieve($file);
         }, $files);
 
-        $paths = array_map(function ($file) {
+        $paths = array_map(static function ($file) {
             return $file['path'];
         }, $retrieved);
 
@@ -113,7 +115,7 @@ class FileCache implements FileCacheContract
             $result = $callback($files, $paths);
         } finally {
             foreach ($retrieved as $file) {
-                fclose($file['handle']);
+                fclose($file['stream']);
             }
         }
 
@@ -122,6 +124,7 @@ class FileCache implements FileCacheContract
 
     /**
      * {@inheritdoc}
+     * @throws Exception
      */
     public function batchOnce(array $files, callable $callback)
     {
@@ -129,7 +132,7 @@ class FileCache implements FileCacheContract
             return $this->retrieve($file);
         }, $files);
 
-        $paths = array_map(function ($file) {
+        $paths = array_map(static function ($file) {
             return $file['path'];
         }, $retrieved);
 
@@ -139,7 +142,7 @@ class FileCache implements FileCacheContract
             foreach ($retrieved as $index => $file) {
                 // Convert to exclusive lock for deletion. Don't delete if lock can't be
                 // obtained.
-                if (flock($file['handle'], LOCK_EX | LOCK_NB)) {
+                if (flock($file['stream'], LOCK_EX | LOCK_NB)) {
                     // This path is not the same than $file['path'] for locally stored
                     // files. We don't want to delete locally stored files.
                     $path = $this->getCachedPath($files[$index]);
@@ -147,7 +150,7 @@ class FileCache implements FileCacheContract
                         $this->files->delete($path);
                     }
                 }
-                fclose($file['handle']);
+                fclose($file['stream']);
             }
         }
 
@@ -232,7 +235,7 @@ class FileCache implements FileCacheContract
      */
     protected function existsRemote(File $file): bool
     {
-        $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
+        $context = stream_context_create(['http' => ['method'=>'HEAD']]);
         $url = $this->encodeUrl($file->getUrl());
         $headers = get_headers($url, 1, $context);
         $headers = array_change_key_case($headers, CASE_LOWER);
@@ -302,17 +305,17 @@ class FileCache implements FileCacheContract
      */
     protected function delete(SplFileInfo $file): bool
     {
-        $handle = fopen($file->getRealPath(), 'rb');
+        $fileStream = fopen($file->getRealPath(), 'rb');
         $deleted = false;
 
         try {
             // Only delete the file if it is not currently used. Else move on.
-            if (flock($handle, LOCK_EX | LOCK_NB)) {
+            if (flock($fileStream, LOCK_EX | LOCK_NB)) {
                 $this->files->delete($file->getRealPath());
                 $deleted = true;
             }
         } finally {
-            fclose($handle);
+            fclose($fileStream);
         }
 
         return $deleted;
@@ -325,8 +328,8 @@ class FileCache implements FileCacheContract
      *
      * @throws Exception If the file could not be cached.
      *
-     * @return array Containing the 'path' to the file and the file 'handle'. Close the
-     * handle when finished.
+     * @return array Containing the 'path' to the file and the file 'stream'. Close the
+     * stream when finished.
      */
     protected function retrieve(File $file): array
     {
@@ -335,38 +338,38 @@ class FileCache implements FileCacheContract
 
         // This will return false if the file already exists. Else it will create it in
         // read and write mode.
-        $handle = @fopen($cachedPath, 'xb+');
+        $cachedFileStream = @fopen($cachedPath, 'xb+');
 
-        if ($handle === false) {
-            // The file exists, get the file handle in read mode.
-            $handle = fopen($cachedPath, 'rb');
+        if ($cachedFileStream === false) {
+            // The file exists, get the file stream in read mode.
+            $cachedFileStream = fopen($cachedPath, 'rb');
             // Wait for any LOCK_EX that is set if the file is currently written.
-            flock($handle, LOCK_SH);
+            flock($cachedFileStream, LOCK_SH);
 
             // Check if the file is still there since the writing operation could have
             // failed. If the file is gone, retry retrieve.
-            if (fstat($handle)['nlink'] === 0) {
-                fclose($handle);
+            if (fstat($cachedFileStream)['nlink'] === 0) {
+                fclose($cachedFileStream);
                 return $this->retrieve($file);
             }
 
             // The file exists and is no longer written to.
-            return $this->retrieveExistingFile($cachedPath, $handle);
+            return $this->retrieveExistingFile($cachedPath, $cachedFileStream);
         }
 
         // The file did not exist and should be written. Hold LOCK_EX until writing
         // finished.
-        flock($handle, LOCK_EX);
+        flock($cachedFileStream, LOCK_EX);
 
         try {
-            $fileInfo = $this->retrieveNewFile($file, $cachedPath, $handle);
+            $fileInfo = $this->retrieveNewFile($file, $cachedPath, $cachedFileStream);
             // Convert the lock so other workers can use the file from now on.
-            flock($handle, LOCK_SH);
+            flock($cachedFileStream, LOCK_SH);
         } catch (Exception $e) {
             // Remove the empty file if writing failed. This is the case that is caught
             // by 'nlink' === 0 above.
             @unlink($cachedPath);
-            fclose($handle);
+            fclose($cachedFileStream);
             throw new RuntimeException("Error while caching file '{$file->getUrl()}': {$e->getMessage()}");
         }
 
@@ -374,14 +377,14 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Get path and handle for a file that exists in the cache.
+     * Get path and stream for a file that exists in the cache.
      *
      * @param string $cachedPath
-     * @param resource $handle
+     * @param resource $cachedFileStream
      *
      * @return array
      */
-    protected function retrieveExistingFile(string $cachedPath, $handle): array
+    protected function retrieveExistingFile(string $cachedPath, $cachedFileStream): array
     {
         // Update access and modification time to signal that this cached file was
         // used recently.
@@ -389,29 +392,29 @@ class FileCache implements FileCacheContract
 
         return [
             'path' => $cachedPath,
-            'handle' => $handle,
+            'stream' => $cachedFileStream,
         ];
     }
 
     /**
-     * Get path and handle for a file that does not yet exist in the cache.
+     * Get path and stream for a file that does not yet exist in the cache.
      *
      * @param File $file
      * @param string $cachedPath
-     * @param resource $handle
+     * @param resource $cachedFileStream
      * @throws Exception
      *
      * @return array
      */
-    protected function retrieveNewFile(File $file, string $cachedPath, $handle): array
+    protected function retrieveNewFile(File $file, string $cachedPath, $cachedFileStream): array
     {
         if ($this->isRemote($file)) {
-            $this->getRemoteFile($file, $handle);
+            $this->getRemoteFile($file, $cachedFileStream);
         } else {
-            $newCachedPath = $this->getDiskFile($file, $handle);
+            $newCachedPath = $this->getDiskFile($file, $cachedFileStream);
 
             // If it is a locally stored file, delete the empty "placeholder"
-            // file again. The handle may stay open; it doesn't matter.
+            // file again. The stream may stay open; it doesn't matter.
             if ($newCachedPath !== $cachedPath) {
                 unlink($cachedPath);
             }
@@ -428,7 +431,7 @@ class FileCache implements FileCacheContract
 
         return [
             'path' => $cachedPath,
-            'handle' => $handle,
+            'stream' => $cachedFileStream,
         ];
     }
 
