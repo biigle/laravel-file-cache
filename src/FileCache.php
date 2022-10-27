@@ -7,8 +7,6 @@ use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
 use Exception;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
-use League\Flysystem\Adapter\Local;
-use League\Flysystem\FileNotFoundException;
 use RuntimeException;
 use SplFileInfo;
 use Symfony\Component\Finder\Finder;
@@ -63,38 +61,6 @@ class FileCache implements FileCacheContract
         return $this->batchOnce([$file], function ($files, $paths) use ($callback) {
             return $callback($files[0], $paths[0]);
         });
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getStream(File $file)
-    {
-        $cachedPath = $this->getCachedPath($file);
-
-        if ($this->files->exists($cachedPath)) {
-            // Update access and modification time to signal that this cached file was
-            // used recently.
-            touch($cachedPath);
-
-            return $this->getFileStream($cachedPath);
-        }
-
-        if ($this->isRemote($file)) {
-            return $this->getFileStream($cachedPath);
-        }
-
-        [$diskName, $path] = $this->splitUrlByPort($file->getUrl());
-
-        // Throws an exception if the disk does not exist.
-        $disk = $this->storage->disk($diskName);
-        $stream = $disk->readStream($path);
-
-        if (is_null($stream)) {
-            throw new RuntimeException('File does not exist.');
-        }
-
-        return $stream;
     }
 
     /**

@@ -188,42 +188,6 @@ class FileCacheTest extends TestCase
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
-    public function testGetStreamCached()
-    {
-        $file = new GenericFile('test://test-image.jpg');
-        $hash = hash('sha256', 'test://test-image.jpg');
-
-        $path = "{$this->cachePath}/{$hash}";
-        touch($path, time() - 1);
-
-        $cache = new FileCacheStub(['path' => $this->cachePath]);
-        $cache->stream = 'abc123';
-        $this->assertNotEquals(time(), fileatime($path));
-        $this->assertEquals('abc123', $cache->getStream($file));
-        clearstatcache();
-        $this->assertEquals(time(), fileatime($path));
-    }
-
-    public function testGetStreamRemote()
-    {
-        $file = new GenericFile('https://files/test-image.jpg');
-        $cache = new FileCacheStub(['path' => $this->cachePath]);
-        $cache->stream = 'abc123';
-        $this->assertEquals('abc123', $cache->getStream($file));
-    }
-
-    public function testGetStreamDisk()
-    {
-        $storage = $this->app['filesystem'];
-        $storage->disk('test')->put('files/test.txt', 'test123');
-        $file = new GenericFile('test://files/test.txt');
-        $cache = new FileCache(['path' => $this->cachePath]);
-
-        $stream = $cache->getStream($file);
-        $this->assertTrue(is_resource($stream));
-        fclose($stream);
-    }
-
     public function testBatch()
     {
         $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');

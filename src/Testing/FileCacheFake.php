@@ -40,18 +40,6 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function getStream(File $file): array
-    {
-        return [
-            'stream' => null,
-            'size' => 0,
-            'mime' => 'inode/x-empty',
-        ];
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     public function batch(array $files, callable $callback)
     {
         $paths = array_map(function ($file) {

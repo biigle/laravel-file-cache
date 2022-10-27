@@ -30,18 +30,6 @@ interface FileCache
     public function getOnce(File $file, callable $callback);
 
     /**
-     * Get a stream resource for a file. If the file is cached, the resource points
-     * to the cached file instead. This will not cache uncached files. Make sure to
-     * close the streams!
-     *
-     * @param \Biigle\FileCache\Contracts\File $file
-     * @throws \Exception If the storage disk does not exist or the file was not found.
-     *
-     * @return resource|null
-     */
-    public function getStream(File $file);
-
-    /**
      * Perform a callback with the paths of many cached files. Use this to prevent
      * pruning of the files while they are processed.
      *
