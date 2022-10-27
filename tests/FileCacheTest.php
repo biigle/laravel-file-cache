@@ -95,7 +95,7 @@ class FileCacheTest extends TestCase
             $cache->get($file, $this->noop);
             $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
-            $this->assertStringContainsString("disk 'abc' does not exist", $e->getMessage());
+            $this->assertStringContainsString("Disk [abc] does not have a configured driver", $e->getMessage());
         }
     }
 
@@ -103,10 +103,11 @@ class FileCacheTest extends TestCase
     {
         $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
         $file = new GenericFile('test://test-image.jpg');
+        $hash = hash('sha256', 'test://test-image.jpg');
         $cache = new FileCache(['path' => $this->cachePath]);
 
         $path = $cache->get($file, $this->noop);
-        $this->assertEquals($this->diskPath.'/test-image.jpg', $path);
+        $this->assertEquals("{$this->cachePath}/{$hash}", $path);
     }
 
     public function testGetDiskLocalDoesNotExist()
@@ -118,7 +119,7 @@ class FileCacheTest extends TestCase
             $cache->get($file, $this->noop);
             $this->fail('Expected an Exception to be thrown.');
         } catch (Exception $e) {
-            $this->assertStringContainsString("File does not exist.", $e->getMessage());
+            $this->assertStringContainsString("File not found at path", $e->getMessage());
         }
     }
 
@@ -228,6 +229,7 @@ class FileCacheTest extends TestCase
         $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
         $file = new GenericFile('test://test-image.jpg');
         $file2 = new GenericFile('test://test-image.jpg');
+        $hash = hash('sha256', 'test://test-image.jpg');
 
         $cache = new FileCache(['path' => $this->cachePath]);
         $paths = $cache->batch([$file, $file2], function ($files, $paths) {
@@ -235,8 +237,8 @@ class FileCacheTest extends TestCase
         });
 
         $this->assertCount(2, $paths);
-        $this->assertStringContainsString('test-image.jpg', $paths[0]);
-        $this->assertStringContainsString('test-image.jpg', $paths[1]);
+        $this->assertStringContainsString($hash, $paths[0]);
+        $this->assertStringContainsString($hash, $paths[1]);
     }
 
     public function testBatchOnce()

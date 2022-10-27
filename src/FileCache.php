@@ -86,15 +86,15 @@ class FileCache implements FileCacheContract
 
         [$diskName, $path] = $this->splitUrlByPort($file->getUrl());
 
-        if (!config("filesystems.disks.{$diskName}")) {
-            throw new RuntimeException("Storage disk '{$diskName}' does not exist.");
+        // Throws an exception if the disk does not exist.
+        $disk = $this->storage->disk($diskName);
+        $stream = $disk->readStream($path);
+
+        if (is_null($stream)) {
+            throw new RuntimeException('File does not exist.');
         }
 
-        try {
-            return $this->storage->disk($diskName)->readStream($path);
-        } catch (FileNotFoundException $e) {
-            throw new RuntimeException($e->getMessage());
-        }
+        return $stream;
     }
 
     /**
@@ -472,18 +472,13 @@ class FileCache implements FileCacheContract
     {
         [$diskName, $path] = $this->splitUrlByPort($file->getUrl());
         $disk = $this->getDisk($file);
-        $adapter = $disk->getDriver()->getAdapter();
 
         // Files from the local driver are not cached.
-        if ($adapter instanceof Local) {
-            if (!$disk->exists($path)) {
-                throw new RuntimeException("File does not exist.");
-            }
-
-            return $adapter->getPathPrefix().$path;
+        $source = $disk->readStream($path);
+        if (is_null($source)) {
+            throw new RuntimeException('File does not exist.');
         }
 
-        $source = $disk->readStream($path);
         $cachedPath = $this->cacheFromResource($file, $source, $target);
         if (is_resource($source)) {
             fclose($source);
@@ -502,7 +497,7 @@ class FileCache implements FileCacheContract
      *
      * @return string Path to the cached file
      */
-    protected function cacheFromResource(File $file, $source, $target)
+    protected function cacheFromResource(File $file, $source, $target): string
     {
         if (!is_resource($source)) {
             throw new RuntimeException('The source resource could not be established.');
@@ -580,10 +575,7 @@ class FileCache implements FileCacheContract
     {
         [$diskName] = $this->splitUrlByPort($file->getUrl());
 
-        if (!config("filesystems.disks.{$diskName}")) {
-            throw new RuntimeException("Storage disk '{$diskName}' does not exist.");
-        }
-
+        // Throws an exception if the disk does not exist.
         return $this->storage->disk($diskName);
     }
 
