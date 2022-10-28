@@ -273,7 +273,7 @@ class FileCache implements FileCacheContract
      */
     protected function existsDisk(File $file): bool
     {
-        $urlWithoutPort = $this->splitUrlByPort($file->getUrl())[1];
+        $urlWithoutPort = $this->splitUrlByPort($file->getUrl())[1] ?? null;
         $exists = $this->getDisk($file)->exists($urlWithoutPort);
 
         if (!$exists) {
@@ -496,7 +496,7 @@ class FileCache implements FileCacheContract
      */
     protected function getDiskFile(File $file, $target): string
     {
-        $path = $this->splitUrlByPort($file->getUrl())[1];
+        $path = $this->splitUrlByPort($file->getUrl())[1] ?? null;
         $disk = $this->getDisk($file);
 
         // Files from the local driver are not cached.
@@ -566,7 +566,7 @@ class FileCache implements FileCacheContract
      */
     protected function getDisk(File $file): \Illuminate\Contracts\Filesystem\Filesystem
     {
-        [$diskName] = $this->splitUrlByPort($file->getUrl());
+        $diskName = $this->splitUrlByPort($file->getUrl())[0] ?? null;
 
         // Throws an exception if the disk does not exist.
         return $this->storage->disk($diskName);
