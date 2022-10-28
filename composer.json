@@ -1,5 +1,5 @@
 {
-    "name": "biigle/laravel-file-cache",
+    "name": "jackardios/laravel-file-cache",
     "description": "Fetch and cache files from local filesystem, cloud storage or public webservers in Laravel",
     "type": "library",
     "license": "MIT",
