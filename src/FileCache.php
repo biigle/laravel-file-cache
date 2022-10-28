@@ -4,10 +4,17 @@ namespace Biigle\FileCache;
 
 use Biigle\FileCache\Contracts\File;
 use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
+use Biigle\FileCache\Exceptions\FileIsTooLargeException;
+use Biigle\FileCache\Exceptions\MimeTypeIsNotAllowedException;
+use Biigle\FileCache\Exceptions\SourceResourceIsInvalidException;
+use Biigle\FileCache\Exceptions\SourceResourceTimedOutException;
 use Exception;
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Psr7\LimitStream;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
-use RuntimeException;
 use SplFileInfo;
 use Symfony\Component\Finder\Finder;
 
@@ -21,18 +28,22 @@ class FileCache implements FileCacheContract
      */
     public function __construct(
         protected array $config = [],
+        protected ?Client $client = null,
         protected ?Filesystem $files = null,
         protected ?FilesystemManager $storage = null
     )
     {
-        $this->config = array_merge(config('file-cache'), $config);
+        $this->config = $this->prepareConfig(array_merge(config('file-cache'), $config));
+        $this->client = $client ?: new Client();
         $this->files = $files ?: app('files');
         $this->storage = $storage ?: app('filesystem');
     }
 
     /**
      * {@inheritdoc}
-     * @throws Exception
+     *
+     * @throws MimeTypeIsNotAllowedException
+     * @throws FileIsTooLargeException
      */
     public function exists(File $file): bool
     {
@@ -45,6 +56,13 @@ class FileCache implements FileCacheContract
 
     /**
      * {@inheritdoc}
+     *
+     * @throws GuzzleException
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceIsInvalidException
+     * @throws SourceResourceTimedOutException
+     * @throws MimeTypeIsNotAllowedException
      */
     public function get(File $file, callable $callback)
     {
@@ -55,6 +73,13 @@ class FileCache implements FileCacheContract
 
     /**
      * {@inheritdoc}
+     *
+     * @throws GuzzleException
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceIsInvalidException
+     * @throws SourceResourceTimedOutException
+     * @throws MimeTypeIsNotAllowedException
      */
     public function getOnce(File $file, callable $callback)
     {
@@ -65,7 +90,13 @@ class FileCache implements FileCacheContract
 
     /**
      * {@inheritdoc}
-     * @throws Exception
+     *
+     * @throws GuzzleException
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceIsInvalidException
+     * @throws SourceResourceTimedOutException
+     * @throws MimeTypeIsNotAllowedException
      */
     public function batch(array $files, callable $callback)
     {
@@ -90,7 +121,13 @@ class FileCache implements FileCacheContract
 
     /**
      * {@inheritdoc}
-     * @throws Exception
+     *
+     * @throws GuzzleException
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceIsInvalidException
+     * @throws SourceResourceTimedOutException
+     * @throws MimeTypeIsNotAllowedException
      */
     public function batchOnce(array $files, callable $callback)
     {
@@ -197,33 +234,32 @@ class FileCache implements FileCacheContract
     /**
      * Check for existence of a remote file.
      *
-     * @throws Exception
+     * @throws MimeTypeIsNotAllowedException
+     * @throws FileIsTooLargeException
      */
     protected function existsRemote(File $file): bool
     {
-        $context = stream_context_create(['http' => ['method'=>'HEAD']]);
-        $url = $this->encodeUrl($file->getUrl());
-        $headers = get_headers($url, 1, $context);
-        $headers = array_change_key_case($headers, CASE_LOWER);
-
-        $exists = explode(' ', $headers[0])[1][0] === '2';
-
-        if (!$exists) {
+        try {
+            $headers = $this->client->head($this->encodeUrl($file->getUrl()), [
+                'timeout' => $this->config['timeout']
+            ])->getHeaders();
+        } catch (GuzzleException) {
             return false;
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = trim(explode(';', $headers['content-type'])[0]);
-            if (!in_array($type, $this->config['mime_types'], true)) {
-                throw new RuntimeException("MIME type '{$type}' not allowed.");
+            $contentType = $headers['Content-Type'][array_key_last($headers['Content-Type'])] ?? '';
+            $type = trim(explode(';', $contentType)[0]);
+            if ($type && !in_array($type, $this->config['mime_types'], true)) {
+                throw MimeTypeIsNotAllowedException::create($type);
             }
         }
 
-        $maxBytes = (int)$this->config['max_file_size'];
-        $size = (int)$headers['content-length'];
+        $maxBytes = $this->config['max_file_size'];
+        $size = (int) $headers['Content-Length'][array_key_last($headers['Content-Length'])];
 
         if ($maxBytes >= 0 && $size > $maxBytes) {
-            throw new RuntimeException("The file is too large with more than {$maxBytes} bytes.");
+            throw FileIsTooLargeException::create($maxBytes);
         }
 
         return true;
@@ -232,11 +268,12 @@ class FileCache implements FileCacheContract
     /**
      * Check for existence of a file from a storage disk.
      *
-     * @throws Exception
+     * @throws MimeTypeIsNotAllowedException
+     * @throws FileIsTooLargeException
      */
     protected function existsDisk(File $file): bool
     {
-        [$port, $urlWithoutPort] = $this->splitUrlByPort($file->getUrl());
+        $urlWithoutPort = $this->splitUrlByPort($file->getUrl())[1];
         $exists = $this->getDisk($file)->exists($urlWithoutPort);
 
         if (!$exists) {
@@ -246,7 +283,7 @@ class FileCache implements FileCacheContract
         if (!empty($this->config['mime_types'])) {
             $type = $this->getDisk($file)->mimeType($urlWithoutPort);
             if (!in_array($type, $this->config['mime_types'], true)) {
-                throw new RuntimeException("MIME type '{$type}' not allowed.");
+                throw MimeTypeIsNotAllowedException::create($type);
             }
         }
 
@@ -255,7 +292,7 @@ class FileCache implements FileCacheContract
         if ($maxBytes >= 0) {
             $size = $this->getDisk($file)->size($urlWithoutPort);
             if ($size > $maxBytes) {
-                throw new RuntimeException("The file is too large with more than {$maxBytes} bytes.");
+                throw FileIsTooLargeException::create($maxBytes);
             }
         }
 
@@ -292,10 +329,15 @@ class FileCache implements FileCacheContract
      * the cached file. If the file is local, nothing will be done and the path to the
      * local file will be returned.
      *
-     * @throws Exception If the file could not be cached.
-     *
      * @return array Containing the 'path' to the file and the file 'stream'. Close the
      * stream when finished.
+     *
+     * @throws GuzzleException
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceIsInvalidException
+     * @throws SourceResourceTimedOutException
+     * @throws MimeTypeIsNotAllowedException
      */
     protected function retrieve(File $file): array
     {
@@ -331,12 +373,13 @@ class FileCache implements FileCacheContract
             $fileInfo = $this->retrieveNewFile($file, $cachedPath, $cachedFileStream);
             // Convert the lock so other workers can use the file from now on.
             flock($cachedFileStream, LOCK_SH);
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             // Remove the empty file if writing failed. This is the case that is caught
             // by 'nlink' === 0 above.
             @unlink($cachedPath);
             fclose($cachedFileStream);
-            throw new RuntimeException("Error while caching file '{$file->getUrl()}': {$e->getMessage()}");
+
+            throw $exception;
         }
 
         return $fileInfo;
@@ -368,14 +411,20 @@ class FileCache implements FileCacheContract
      * @param File $file
      * @param string $cachedPath
      * @param resource $cachedFileStream
-     * @throws Exception
      *
      * @return array
+     *
+     * @throws GuzzleException
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceIsInvalidException
+     * @throws SourceResourceTimedOutException
+     * @throws MimeTypeIsNotAllowedException
      */
     protected function retrieveNewFile(File $file, string $cachedPath, $cachedFileStream): array
     {
         if ($this->isRemote($file)) {
-            $this->getRemoteFile($file, $cachedFileStream);
+            $cachedPath = $this->getRemoteFile($file, $cachedFileStream);
         } else {
             $newCachedPath = $this->getDiskFile($file, $cachedFileStream);
 
@@ -391,7 +440,7 @@ class FileCache implements FileCacheContract
         if (!empty($this->config['mime_types'])) {
             $type = $this->files->mimeType($cachedPath);
             if (!in_array($type, $this->config['mime_types'], true)) {
-                throw new RuntimeException("MIME type '{$type}' not allowed.");
+                throw MimeTypeIsNotAllowedException::create($type);
             }
         }
 
@@ -406,19 +455,26 @@ class FileCache implements FileCacheContract
      *
      * @param File $file Remote file
      * @param resource $target Target file resource
-     * @throws Exception If the file could not be cached.
      *
      * @return string
+     *
+     * @throws GuzzleException
+     * @throws FileIsTooLargeException
      */
-    protected function getRemoteFile(File $file, $target)
+    protected function getRemoteFile(File $file, $target): string
     {
-        $context = stream_context_create(['http' => [
+        $cachedPath = $this->getCachedPath($file);
+
+        $maxBytes = $this->config['max_file_size'];
+        $isUnlimitedSize = $maxBytes === -1;
+        $limitedTarget = new LimitStream(Utils::streamFor($target), $isUnlimitedSize ? -1 : $maxBytes + 1);
+        $this->client->get($this->encodeUrl($file->getUrl()), [
             'timeout' => $this->config['timeout'],
-        ]]);
-        $source = $this->getFileStream($file->getUrl(), $context);
-        $cachedPath = $this->cacheFromResource($file, $source, $target);
-        if (is_resource($source)) {
-            fclose($source);
+            'sink' => $limitedTarget,
+        ]);
+
+        if (!$isUnlimitedSize && $limitedTarget->getSize() > $maxBytes) {
+            throw FileIsTooLargeException::create($maxBytes);
         }
 
         return $cachedPath;
@@ -430,20 +486,21 @@ class FileCache implements FileCacheContract
      *
      * @param File $file Cloud storage file
      * @param resource $target Target file resource
-     * @throws Exception If the file could not be cached.
      *
      * @return string
+     *
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceIsInvalidException
+     * @throws SourceResourceTimedOutException
      */
     protected function getDiskFile(File $file, $target): string
     {
-        [$diskName, $path] = $this->splitUrlByPort($file->getUrl());
+        $path = $this->splitUrlByPort($file->getUrl())[1];
         $disk = $this->getDisk($file);
 
         // Files from the local driver are not cached.
         $source = $disk->readStream($path);
-        if (is_null($source)) {
-            throw new RuntimeException('File does not exist.');
-        }
 
         $cachedPath = $this->cacheFromResource($file, $source, $target);
         if (is_resource($source)) {
@@ -459,45 +516,39 @@ class FileCache implements FileCacheContract
      * @param File $file
      * @param resource $source
      * @param resource $target
-     * @throws Exception If the file could not be cached.
      *
      * @return string Path to the cached file
+     *
+     * @throws SourceResourceIsInvalidException
+     * @throws FileIsTooLargeException
+     * @throws SourceResourceTimedOutException
      */
     protected function cacheFromResource(File $file, $source, $target): string
     {
         if (!is_resource($source)) {
-            throw new RuntimeException('The source resource could not be established.');
+            throw SourceResourceIsInvalidException::create('The source resource could not be established.');
         }
 
         $cachedPath = $this->getCachedPath($file);
-        $maxBytes = (int)$this->config['max_file_size'];
-        $bytes = stream_copy_to_stream($source, $target, $maxBytes);
+        $maxBytes = $this->config['max_file_size'];
+        $isUnlimitedSize = $maxBytes === -1;
+        $bytes = stream_copy_to_stream($source, $target, $isUnlimitedSize ? -1 : $maxBytes + 1);
 
-        if ($bytes === $maxBytes) {
-            throw new RuntimeException("The file is too large with more than {$maxBytes} bytes.");
+        if (!$isUnlimitedSize && $bytes > $maxBytes) {
+            throw FileIsTooLargeException::create($maxBytes);
         }
 
         if ($bytes === false) {
-            throw new RuntimeException('The source resource is invalid.');
+            throw SourceResourceIsInvalidException::create();
         }
 
         $metadata = stream_get_meta_data($source);
 
         if (array_key_exists('timed_out', $metadata) && $metadata['timed_out']) {
-            throw new RuntimeException('The source stream timed out while reading data.');
+            throw SourceResourceTimedOutException::create();
         }
 
         return $cachedPath;
-    }
-
-    /**
-     * Creates the cache directory if it doesn't exist yet.
-     */
-    protected function ensurePathExists(): void
-    {
-        if (!$this->files->exists($this->config['path'])) {
-            $this->files->makeDirectory($this->config['path'], 0755, true, true);
-        }
     }
 
     /**
@@ -511,30 +562,6 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Get the stream resource for a file.
-     *
-     * @param string $url
-     * @param resource|null $context Stream context
-     *
-     * @return resource|false
-     */
-    protected function getFileStream(string $url, $context = null)
-    {
-        // Escape special characters (e.g. spaces) that may occur in parts of a HTTP URL.
-        // We do not use urlencode or rawurlencode because they encode some characters
-        // (e.g. "+") that should not be changed in the URL.
-        if (str_starts_with($url, 'http')) {
-            $url = $this->encodeUrl($url);
-        }
-
-        if (is_resource($context)) {
-            return @fopen($url, 'rb', false, $context);
-        }
-
-        return @fopen($url, 'rb');
-    }
-
-    /**
      * Get the storage disk on which a file is stored.
      */
     protected function getDisk(File $file): \Illuminate\Contracts\Filesystem\Filesystem
@@ -543,6 +570,27 @@ class FileCache implements FileCacheContract
 
         // Throws an exception if the disk does not exist.
         return $this->storage->disk($diskName);
+    }
+
+    protected function prepareConfig(array $config): array
+    {
+        $config['max_file_size'] = (int)$config['max_file_size'];
+        $config['max_age'] = (int)$config['max_age'];
+        $config['max_size'] = (int)$config['max_size'];
+        $config['timeout'] = (float)$config['timeout'];
+        $config['mime_types'] = (array)($config['mime_types'] ?? []);
+
+        return $config;
+    }
+
+    /**
+     * Creates the cache directory if it doesn't exist yet.
+     */
+    protected function ensurePathExists(): void
+    {
+        if (!$this->files->exists($this->config['path'])) {
+            $this->files->makeDirectory($this->config['path'], 0755, true, true);
+        }
     }
 
     /**

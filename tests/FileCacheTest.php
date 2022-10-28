@@ -3,9 +3,16 @@
 namespace Biigle\FileCache\Tests;
 
 use Biigle\FileCache\Contracts\File;
+use Biigle\FileCache\Exceptions\FileIsTooLargeException;
+use Biigle\FileCache\Exceptions\MimeTypeIsNotAllowedException;
 use Biigle\FileCache\FileCache;
 use Biigle\FileCache\GenericFile;
 use Exception;
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
+use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Filesystem\FilesystemManager;
 
@@ -62,28 +69,32 @@ class FileCacheTest extends TestCase
     {
         $file = new GenericFile('https://files/image.jpg');
         $hash = hash('sha256', 'https://files/image.jpg');
-        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $mock = new MockHandler([
+            new Response(200, [], file_get_contents(__DIR__.'/files/test-image.jpg')),
+        ]);
+        $cache = new FileCache(['path' => $this->cachePath], new Client(['handler' => HandlerStack::create($mock)]));
 
-        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'rb');
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
         $path = $cache->get($file, $this->noop);
         $this->assertEquals("{$this->cachePath}/{$hash}", $path);
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        $this->assertFalse(is_resource($cache->stream));
     }
 
     public function testGetRemoteTooLarge()
     {
         $file = new GenericFile('https://files/image.jpg');
-        $cache = new FileCacheStub([
+        $hash = hash('sha256', 'https://files/image.jpg');
+        $mock = new MockHandler([
+            new Response(200, [], file_get_contents(__DIR__.'/files/test-image.jpg')),
+        ]);
+        $cache = new FileCache([
             'path' => $this->cachePath,
             'max_file_size' => 1,
-        ]);
+        ], new Client(['handler' => HandlerStack::create($mock)]));
 
-        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'rb');
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('file is too large');
+        $this->expectException(FileIsTooLargeException::class);
         $cache->get($file, $this->noop);
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
     public function testGetDiskDoesNotExist()
@@ -115,12 +126,8 @@ class FileCacheTest extends TestCase
         $file = new GenericFile('test://test-image.jpg');
         $cache = new FileCache(['path' => $this->cachePath]);
 
-        try {
-            $cache->get($file, $this->noop);
-            $this->fail('Expected an Exception to be thrown.');
-        } catch (Exception $e) {
-            $this->assertStringContainsString("File not found at path", $e->getMessage());
-        }
+        $this->expectException(FileNotFoundException::class);
+        $cache->get($file, $this->noop);
     }
 
     public function testGetDiskCloud()
@@ -169,9 +176,8 @@ class FileCacheTest extends TestCase
         ]);
 
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('file is too large');
-        $path = $cache->get($file, $this->noop);
+        $this->expectException(FileIsTooLargeException::class);
+        $cache->get($file, $this->noop);
     }
 
     public function testGetOnce()
@@ -275,8 +281,8 @@ class FileCacheTest extends TestCase
         try {
             $cache->get(new GenericFile('fixtures://test-file.txt'), $this->noop);
             $this->fail('Expected an Exception to be thrown.');
-        } catch (Exception $e) {
-            $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
+        } catch (MimeTypeIsNotAllowedException $e) {
+            $this->assertStringContainsString("text/plain", $e->getMessage());
         }
     }
 
@@ -299,12 +305,8 @@ class FileCacheTest extends TestCase
             'max_file_size' => 1,
         ]);
 
-        try {
-            $cache->exists($file);
-            $this->fail('Expected an Exception to be thrown.');
-        } catch (Exception $e) {
-            $this->assertStringContainsString("too large", $e->getMessage());
-        }
+        $this->expectException(FileIsTooLargeException::class);
+        $cache->exists($file);
     }
 
     public function testExistsDiskMimeNotAllowed()
@@ -319,8 +321,8 @@ class FileCacheTest extends TestCase
         try {
             $cache->exists($file);
             $this->fail('Expected an Exception to be thrown.');
-        } catch (Exception $e) {
-            $this->assertStringContainsString("type 'text/plain' not allowed", $e->getMessage());
+        } catch (MimeTypeIsNotAllowedException $e) {
+            $this->assertStringContainsString("text/plain", $e->getMessage());
         }
     }
 
@@ -353,12 +355,8 @@ class FileCacheTest extends TestCase
             'max_file_size' => 1,
         ]);
 
-        try {
-            $cache->exists($file);
-            $this->fail('Expected an Exception to be thrown.');
-        } catch (Exception $e) {
-            $this->assertStringContainsString("too large", $e->getMessage());
-        }
+        $this->expectException(FileIsTooLargeException::class);
+        $cache->exists($file);
     }
 
     public function testExistsRemoteMimeNotAllowed()
@@ -372,23 +370,8 @@ class FileCacheTest extends TestCase
         try {
             $cache->exists($file);
             $this->fail('Expected an Exception to be thrown.');
-        } catch (Exception $e) {
-            $this->assertStringContainsString("type 'application/json' not allowed", $e->getMessage());
+        } catch (MimeTypeIsNotAllowedException $e) {
+            $this->assertStringContainsString("application/json", $e->getMessage());
         }
-    }
-}
-
-class FileCacheStub extends FileCache
-{
-    const MAX_RETRIES = 1;
-    public $stream = null;
-
-    protected function getFileStream($url, $context = null)
-    {
-        if (is_null($this->stream)) {
-            return parent::getFileStream($url, $context);
-        }
-
-        return $this->stream;
     }
 }
