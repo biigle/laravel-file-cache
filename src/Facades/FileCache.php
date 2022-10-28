@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static bool exists(\Biigle\FileCache\Contracts\File $file)
- * @method static mixed get(\Biigle\FileCache\Contracts\File $file, callable $callback)
- * @method static mixed getOnce(\Biigle\FileCache\Contracts\File $file, callable $callback)
- * @method static mixed batch(\Biigle\FileCache\Contracts\File[] $files, callable $callback)
- * @method static mixed batchOnce(\Biigle\FileCache\Contracts\File[] $files, callable $callback)
+ * @method static mixed get(\Biigle\FileCache\Contracts\File $file, ?callable $callback = null)
+ * @method static mixed getOnce(\Biigle\FileCache\Contracts\File $file, ?callable $callback = null)
+ * @method static mixed batch(\Biigle\FileCache\Contracts\File[] $files, ?callable $callback = null)
+ * @method static mixed batchOnce(\Biigle\FileCache\Contracts\File[] $files, ?callable $callback = null)
  * @method static void prune()
  * @method static void clear()
  *

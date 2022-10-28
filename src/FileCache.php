@@ -64,8 +64,10 @@ class FileCache implements FileCacheContract
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
      */
-    public function get(File $file, callable $callback)
+    public function get(File $file, ?callable $callback = null)
     {
+        $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultGetCallback']);
+
         return $this->batch([$file], function ($files, $paths) use ($callback) {
             return $callback($files[0], $paths[0]);
         });
@@ -81,8 +83,10 @@ class FileCache implements FileCacheContract
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
      */
-    public function getOnce(File $file, callable $callback)
+    public function getOnce(File $file, ?callable $callback = null)
     {
+        $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultGetCallback']);
+
         return $this->batchOnce([$file], function ($files, $paths) use ($callback) {
             return $callback($files[0], $paths[0]);
         });
@@ -98,8 +102,10 @@ class FileCache implements FileCacheContract
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
      */
-    public function batch(array $files, callable $callback)
+    public function batch(array $files, ?callable $callback = null)
     {
+        $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultBatchCallback']);
+
         $retrieved = array_map(function ($file) {
             return $this->retrieve($file);
         }, $files);
@@ -129,8 +135,10 @@ class FileCache implements FileCacheContract
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
      */
-    public function batchOnce(array $files, callable $callback)
+    public function batchOnce(array $files, ?callable $callback = null)
     {
+        $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultBatchCallback']);
+
         $retrieved = array_map(function ($file) {
             return $this->retrieve($file);
         }, $files);
@@ -623,5 +631,15 @@ class FileCache implements FileCacheContract
         $replacement = ['%20'];
 
         return str_replace($pattern, $replacement, $url);
+    }
+
+    protected static function defaultGetCallback(File $file, string $path): string
+    {
+        return $path;
+    }
+
+    protected static function defaultBatchCallback(array $files, array $paths): array
+    {
+        return $paths;
     }
 }

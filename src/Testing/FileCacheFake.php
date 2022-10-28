@@ -22,7 +22,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function get(File $file, callable $callback)
+    public function get(File $file, ?callable $callback = null)
     {
         return $this->batch([$file], function ($files, $paths) use ($callback) {
             return $callback($files[0], $paths[0]);
@@ -32,7 +32,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function getOnce(File $file, callable $callback)
+    public function getOnce(File $file, ?callable $callback = null)
     {
         return $this->get($file, $callback);
     }
@@ -40,7 +40,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function batch(array $files, callable $callback)
+    public function batch(array $files, ?callable $callback = null)
     {
         $paths = array_map(function ($file) {
             $hash = hash('sha256', $file->getUrl());
@@ -54,7 +54,7 @@ class FileCacheFake implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function batchOnce(array $files, callable $callback)
+    public function batchOnce(array $files, ?callable $callback = null)
     {
         return $this->batch($files, $callback);
     }
