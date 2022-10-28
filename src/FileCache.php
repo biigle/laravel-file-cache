@@ -468,10 +468,11 @@ class FileCache implements FileCacheContract
         $maxBytes = $this->config['max_file_size'];
         $isUnlimitedSize = $maxBytes === -1;
         $limitedTarget = new LimitStream(Utils::streamFor($target), $isUnlimitedSize ? -1 : $maxBytes + 1);
-        $this->client->get($this->encodeUrl($file->getUrl()), [
+        $response = $this->client->get($this->encodeUrl($file->getUrl()), [
             'timeout' => $this->config['timeout'],
             'sink' => $limitedTarget,
         ]);
+        $response->getBody()->detach();
 
         if (!$isUnlimitedSize && $limitedTarget->getSize() > $maxBytes) {
             throw FileIsTooLargeException::create($maxBytes);
