@@ -10,7 +10,7 @@ The file cache is specifically designed for use in concurrent processing with mu
 ## Installation
 
 ```
-composer require biigle/laravel-file-cache
+composer require jackardios/laravel-file-cache
 ```
 
 ### Laravel
