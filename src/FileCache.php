@@ -6,6 +6,8 @@ use Biigle\FileCache\Contracts\File;
 use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
 use Biigle\FileCache\Exceptions\FileLockedException;
 use Exception;
+use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use SplFileInfo;
@@ -39,17 +41,25 @@ class FileCache implements FileCacheContract
     protected $storage;
 
     /**
+     * Guzzle HTTP client to use
+     *
+     * @var ClientInterface
+     */
+    protected $client;
+
+    /**
      * Create an instance.
      *
      * @param array $config Optional custom configuration.
      * @param Filesystem $files
      * @param FilesystemManager $storage
      */
-    public function __construct(array $config = [], $files = null, $storage = null)
+    public function __construct(array $config = [], $files = null, $storage = null, $client = null)
     {
         $this->config = array_merge(config('file-cache'), $config);
         $this->files = $files ?: app('files');
         $this->storage = $storage ?: app('filesystem');
+        $this->client = $client ?: $this->makeHttpClient();
     }
 
     /**
@@ -254,26 +264,23 @@ class FileCache implements FileCacheContract
      */
     protected function existsRemote($file)
     {
-        $context  = stream_context_create(['http' => ['method'=>'HEAD']]);
-        $url = $this->encodeUrl($file->getUrl());
-        $headers = get_headers($url, 1, $context);
-        $headers = array_change_key_case($headers, CASE_LOWER);
+        $response = $this->client->head($file->getUrl());
+        $code = $response->getStatusCode();
 
-        $exists = explode(' ', $headers[0])[1][0] === '2';
-
-        if (!$exists) {
+        if ($code < 200 || $code >= 300) {
             return false;
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = trim(explode(';', $headers['content-type'])[0]);
+            $type = $response->getHeaderLine('content-type');
+            $type = trim(explode(';', $type)[0]);
             if (!in_array($type, $this->config['mime_types'])) {
                 throw new Exception("MIME type '{$type}' not allowed.");
             }
         }
 
         $maxBytes = intval($this->config['max_file_size']);
-        $size = intval($headers['content-length']);
+        $size = intval($response->getHeaderLine('content-length'));
 
         if ($maxBytes >= 0 && $size > $maxBytes) {
             throw new Exception("The file is too large with more than {$maxBytes} bytes.");
@@ -437,7 +444,11 @@ class FileCache implements FileCacheContract
     protected function retrieveNewFile(File $file, $cachedPath, $handle)
     {
         if ($this->isRemote($file)) {
-            $this->getRemoteFile($file, $handle);
+            $source = $this->getFileStream($file->getUrl());
+            $cachedPath = $this->cacheFromResource($file, $source, $handle);
+            if (is_resource($source)) {
+                fclose($source);
+            }
         } else {
             $newCachedPath = $this->getDiskFile($file, $handle);
 
@@ -461,29 +472,6 @@ class FileCache implements FileCacheContract
             'path' => $cachedPath,
             'handle' => $handle,
         ];
-    }
-
-    /**
-     * Cache a remote file and get the path to the cached file.
-     *
-     * @param File $file Remote file
-     * @param resource $target Target file resource
-     * @throws Exception If the file could not be cached.
-     *
-     * @return string
-     */
-    protected function getRemoteFile(File $file, $target)
-    {
-        $context = stream_context_create(['http' => [
-            'timeout' => $this->config['timeout'],
-        ]]);
-        $source = $this->getFileStream($file->getUrl(), $context);
-        $cachedPath = $this->cacheFromResource($file, $source, $target);
-        if (is_resource($source)) {
-            fclose($source);
-        }
-
-        return $cachedPath;
     }
 
     /**
@@ -579,21 +567,13 @@ class FileCache implements FileCacheContract
      * Get the stream resource for an file.
      *
      * @param string $url
-     * @param resource|null $context Stream context
      *
      * @return resource
      */
-    protected function getFileStream($url, $context = null)
+    protected function getFileStream($url)
     {
-        // Escape special characters (e.g. spaces) that may occur in parts of a HTTP URL.
-        // We do not use urlencode or rawurlencode because they encode some characters
-        // (e.g. "+") that should not be changed in the URL.
         if (strpos($url, 'http') === 0) {
-            $url = $this->encodeUrl($url);
-        }
-
-        if (is_resource($context)) {
-            return @fopen($url, 'r', false, $context);
+            return $this->client->get($url)->getBody()->detach();
         }
 
         return @fopen($url, 'r');
@@ -627,20 +607,15 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Escape special characters (e.g. spaces) that may occur in parts of a HTTP URL.
-     * We do not use urlencode or rawurlencode because they encode some characters
-     * (e.g. "+") that should not be changed in the URL.
+     * Create a new Guzzle HTTP client.
      *
-     * @param string $url
-     *
-     * @return string
+     * @return ClientInterface
      */
-    protected function encodeUrl($url)
+    protected function makeHttpClient(): ClientInterface
     {
-        // List of characters to substitute and their replacements at the same index.
-        $pattern = [' '];
-        $replacement = ['%20'];
-
-        return str_replace($pattern, $replacement, $url);
+        return new Client([
+            'timeout' => $this->config['timeout'],
+            'http_errors' => false,
+        ]);
     }
 }
