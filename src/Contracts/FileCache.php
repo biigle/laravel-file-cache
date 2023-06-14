@@ -12,10 +12,11 @@ interface FileCache
      * @param File $file
      * @param callable $callback Gets the file object and the path to the cached file
      * file as arguments.
+     * @param bool $throwOnLock Whether to throw an exception if a file is currently locked (i.e. written to). Otherwise the method will wait until the lock is released.
      *
      * @return mixed Result of the callback.
      */
-    public function get(File $file, callable $callback);
+    public function get(File $file, callable $callback, bool $throwOnLock);
 
     /**
      * Like `get` but deletes the cached file afterwards (if it is not used somewhere
@@ -24,10 +25,11 @@ interface FileCache
      * @param File $file
      * @param callable $callback Gets the file object and the path to the cached file
      * file as arguments.
+     * @param bool $throwOnLock Whether to throw an exception if a file is currently locked (i.e. written to). Otherwise the method will wait until the lock is released.
      *
      * @return mixed Result of the callback.
      */
-    public function getOnce(File $file, callable $callback);
+    public function getOnce(File $file, callable $callback, bool $throwOnLock);
 
     /**
      * Get a stream resource for an file. If the file is cached, the resource points
@@ -48,10 +50,11 @@ interface FileCache
      * @param array $files
      * @param callable $callback Gets the array of file objects and the array of paths
      * to the cached file files (in the same ordering) as arguments.
+     * @param bool $throwOnLock Whether to throw an exception if a file is currently locked (i.e. written to). Otherwise the method will wait until the lock is released.
      *
      * @return mixed Result of the callback.
      */
-    public function batch(array $files, callable $callback);
+    public function batch(array $files, callable $callback, bool $throwOnLock);
 
     /**
      * Like `batch` but deletes the cached files afterwards (if they are not used
@@ -60,10 +63,11 @@ interface FileCache
      * @param array $files
      * @param callable $callback Gets the array of file objects and the array of paths
      * to the cached file files (in the same ordering) as arguments.
+     * @param bool $throwOnLock Whether to throw an exception if a file is currently locked (i.e. written to). Otherwise the method will wait until the lock is released.
      *
      * @return mixed Result of the callback.
      */
-    public function batchOnce(array $files, callable $callback);
+    public function batchOnce(array $files, callable $callback, bool $throwOnLock);
 
     /**
      * Remove cached files that are too old or exceed the maximum cache size.

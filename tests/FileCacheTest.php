@@ -3,6 +3,7 @@
 namespace Biigle\FileCache\Tests;
 
 use Biigle\FileCache\Contracts\File;
+use Biigle\FileCache\Exceptions\FileLockedException;
 use Biigle\FileCache\FileCache;
 use Biigle\FileCache\GenericFile;
 use Exception;
@@ -168,6 +169,21 @@ class FileCacheTest extends TestCase
         $path = $cache->get($file, $this->noop);
     }
 
+    public function testGetThrowOnLock()
+    {
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $file = new GenericFile('abc://some/image.jpg');
+        $hash = hash('sha256', 'abc://some/image.jpg');
+        $path = "{$this->cachePath}/{$hash}";
+        touch($path, time() - 1);
+
+        $handle = fopen($path, 'w');
+        flock($handle, LOCK_EX);
+
+        $this->expectException(FileLockedException::class);
+        $cache->get($file, fn ($file, $path) => $file, true);
+    }
+
     public function testGetOnce()
     {
         $file = new GenericFile('test://test-image.jpg');
@@ -180,6 +196,21 @@ class FileCacheTest extends TestCase
         });
         $this->assertInstanceof(File::class, $file);
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
+    }
+
+    public function testGetOnceThrowOnLock()
+    {
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $file = new GenericFile('abc://some/image.jpg');
+        $hash = hash('sha256', 'abc://some/image.jpg');
+        $path = "{$this->cachePath}/{$hash}";
+        touch($path, time() - 1);
+
+        $handle = fopen($path, 'w');
+        flock($handle, LOCK_EX);
+
+        $this->expectException(FileLockedException::class);
+        $cache->getOnce($file, fn ($file, $path) => $file, true);
     }
 
     public function testGetStreamCached()
@@ -233,6 +264,21 @@ class FileCacheTest extends TestCase
         $this->assertCount(2, $paths);
         $this->assertStringContainsString($hash, $paths[0]);
         $this->assertStringContainsString($hash, $paths[1]);
+    }
+
+    public function testBatchThrowOnLock()
+    {
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $file = new GenericFile('abc://some/image.jpg');
+        $hash = hash('sha256', 'abc://some/image.jpg');
+        $path = "{$this->cachePath}/{$hash}";
+        touch($path, time() - 1);
+
+        $handle = fopen($path, 'w');
+        flock($handle, LOCK_EX);
+
+        $this->expectException(FileLockedException::class);
+        $cache->batch([$file], fn ($file, $path) => $file, true);
     }
 
     public function testBatchOnce()

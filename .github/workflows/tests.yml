@@ -9,6 +9,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       matrix:
         php-versions: ['8.0', '8.1']
@@ -21,11 +22,10 @@ jobs:
       uses: shivammathur/setup-php@v2
       with:
         php-version: ${{ matrix.php-versions }}
-        tools: phpunit:latest
 
     - name: Setup Laravel
       run: composer require -W --dev laravel/laravel:${{ matrix.laravel-versions }}
 
     - name: Run tests
-      run: phpunit
+      run: ./vendor/bin/phpunit
 

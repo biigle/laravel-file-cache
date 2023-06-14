@@ -4,6 +4,7 @@ namespace Biigle\FileCache;
 
 use Biigle\FileCache\Contracts\File;
 use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
+use Biigle\FileCache\Exceptions\FileLockedException;
 use Exception;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
@@ -66,21 +67,21 @@ class FileCache implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function get(File $file, callable $callback)
+    public function get(File $file, callable $callback, bool $throwOnLock = false)
     {
         return $this->batch([$file], function ($files, $paths) use ($callback) {
             return call_user_func($callback, $files[0], $paths[0]);
-        });
+        }, $throwOnLock);
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getOnce(File $file, callable $callback)
+    public function getOnce(File $file, callable $callback, bool $throwOnLock = false)
     {
         return $this->batchOnce([$file], function ($files, $paths) use ($callback) {
             return call_user_func($callback, $files[0], $paths[0]);
-        });
+        }, $throwOnLock);
     }
 
     /**
@@ -118,10 +119,10 @@ class FileCache implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function batch(array $files, callable $callback)
+    public function batch(array $files, callable $callback, bool $throwOnLock = false)
     {
-        $retrieved = array_map(function ($file) {
-            return $this->retrieve($file);
+        $retrieved = array_map(function ($file) use ($throwOnLock) {
+            return $this->retrieve($file, $throwOnLock);
         }, $files);
 
         $paths = array_map(function ($file) {
@@ -142,10 +143,10 @@ class FileCache implements FileCacheContract
     /**
      * {@inheritdoc}
      */
-    public function batchOnce(array $files, callable $callback)
+    public function batchOnce(array $files, callable $callback, bool $throwOnLock = false)
     {
-        $retrieved = array_map(function ($file) {
-            return $this->retrieve($file);
+        $retrieved = array_map(function ($file) use ($throwOnLock) {
+            return $this->retrieve($file, $throwOnLock);
         }, $files);
 
         $paths = array_map(function ($file) {
@@ -347,12 +348,15 @@ class FileCache implements FileCacheContract
      * local file will be returned.
      *
      * @param File $file File to get the path for
+     * @param bool $throwOnLock Whether to throw an exception if a file is currently locked (i.e. written to). Otherwise the method will wait until the lock is released.
      * @throws Exception If the file could not be cached.
+     * @throws FileLockedException If the file is locked and `throwOnLock` was `true`.
+     *
      *
      * @return array Containing the 'path' to the file and the file 'handle'. Close the
      * handle when finished.
      */
-    protected function retrieve(File $file)
+    protected function retrieve(File $file, bool $throwOnLock = false)
     {
         $this->ensurePathExists();
         $cachedPath = $this->getCachedPath($file);
@@ -364,6 +368,10 @@ class FileCache implements FileCacheContract
         if ($handle === false) {
             // The file exists, get the file handle in read mode.
             $handle = fopen($cachedPath, 'r');
+            if ($throwOnLock && !flock($handle, LOCK_SH | LOCK_NB)) {
+                throw new FileLockedException;
+            }
+
             // Wait for any LOCK_EX that is set if the file is currently written.
             flock($handle, LOCK_SH);
 
