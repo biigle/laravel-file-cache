@@ -385,8 +385,8 @@ class FileCacheTest extends TestCase
 
     public function testExistsDiskMimeNotAllowed()
     {
-        $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
-        $file = new GenericFile('test://test-image.jpg');
+        $this->app['files']->put("{$this->diskPath}/test-file.txt", 'abc');
+        $file = new GenericFile('test://test-file.txt');
         $cache = new FileCache([
             'path' => $this->cachePath,
             'mime_types' => ['image/jpeg'],
