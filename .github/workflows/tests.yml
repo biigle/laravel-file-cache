@@ -24,6 +24,9 @@ jobs:
         php-version: ${{ matrix.php-versions }}
         tools: phpunit:latest
 
+    - name: Update dependencies
+      run: composer update
+
     - name: Setup Laravel
       run: composer require -W --dev laravel/laravel:${{ matrix.laravel-versions }}
 
