@@ -27,5 +27,5 @@ jobs:
       run: composer require -W --dev laravel/laravel:${{ matrix.laravel-versions }}
 
     - name: Run tests
-      run: ./vedor/bin/phpunit
+      run: ./vendor/bin/phpunit
 
