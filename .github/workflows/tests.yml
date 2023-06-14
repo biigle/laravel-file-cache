@@ -22,7 +22,7 @@ jobs:
       uses: shivammathur/setup-php@v2
       with:
         php-version: ${{ matrix.php-versions }}
-        tools: phpunit:latest
+        tools: phpunit:^9.0
 
     - name: Update dependencies
       run: composer update
