@@ -615,6 +615,7 @@ class FileCache implements FileCacheContract
     {
         return new Client([
             'timeout' => $this->config['timeout'],
+            'connect_timeout' => $this->config['connect_timeout'],
             'http_errors' => false,
         ]);
     }
