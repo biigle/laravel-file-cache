@@ -24,18 +24,25 @@ return [
     'path' => storage_path('framework/cache/files'),
 
     /*
-     | Total connection timeout when reading remote files. If loading the
-     | file takes longer than this, it will fail.
+     | Total connection timeout when reading remote files in seconds. If
+     | loading the file takes longer than this, it will fail.
      | Default: 0 (indefinitely)
      */
     'timeout' => env('FILE_CACHE_TIMEOUT', 0),
 
     /*
-     | Timeout to initiate a connection to load a remote file. If it takes
-     | longer, it will fail. Set to 0 to wait indefinitely.
+     | Timeout to initiate a connection to load a remote file in seconds. If
+     | it takes longer, it will fail. Set to 0 to wait indefinitely.
      | Default: 5.0
      */
     'connect_timeout' => env('FILE_CACHE_CONNECT_TIMEOUT', 5.0),
+
+    /*
+     | Timeout for reading a stream of a remote file in seconds. If it takes
+     | longer, it will fail. Set to -1 to wait indefinitely.
+     | Default: 5.0
+     */
+    'read_timeout' => env('FILE_CACHE_READ_TIMEOUT', 5.0),
 
     /*
      | Interval for the scheduled task to prune the file cache.
