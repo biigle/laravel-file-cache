@@ -51,6 +51,7 @@ class FileCacheTest extends TestCase
         $hash = hash('sha256', 'abc://some/image.jpg');
 
         $path = "{$this->cachePath}/{$hash}";
+        copy(__DIR__.'/files/test-image.jpg', $path);
         $this->assertTrue(touch($path, time() - 1));
         $fileatime = fileatime($path);
         $this->assertNotEquals(time(), $fileatime);
@@ -188,12 +189,27 @@ class FileCacheTest extends TestCase
         $cache->get($file, fn ($file, $path) => $file, true);
     }
 
+    public function testGetIgnoreZeroSize()
+    {
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $file = new GenericFile('fixtures://test-file.txt');
+        $hash = hash('sha256', 'fixtures://test-file.txt');
+
+        $path = "{$this->cachePath}/{$hash}";
+        touch($path);
+        $this->assertEquals(0, filesize($path));
+
+        $file = $cache->get($file, function ($file, $path) {
+            return $file;
+        });
+
+        $this->assertNotEquals(0, filesize($path));
+    }
+
     public function testGetOnce()
     {
-        $file = new GenericFile('test://test-image.jpg');
-        $hash = hash('sha256', 'test://test-image.jpg');
-        touch("{$this->cachePath}/{$hash}");
-        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
+        $file = new GenericFile('fixtures://test-image.jpg');
+        $hash = hash('sha256', 'fixtures://test-image.jpg');
         $cache = new FileCache(['path' => $this->cachePath]);
         $file = $cache->getOnce($file, function ($file, $path) {
             return $file;
@@ -287,10 +303,8 @@ class FileCacheTest extends TestCase
 
     public function testBatchOnce()
     {
-        $file = new GenericFile('test://test-image.jpg');
-        $hash = hash('sha256', 'test://test-image.jpg');
-        touch("{$this->cachePath}/{$hash}");
-        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/{$hash}"));
+        $file = new GenericFile('fixtures://test-image.jpg');
+        $hash = hash('sha256', 'fixtures://test-image.jpg');
         (new FileCache(['path' => $this->cachePath]))->batchOnce([$file], $this->noop);
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }

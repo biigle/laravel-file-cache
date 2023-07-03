@@ -382,10 +382,19 @@ class FileCache implements FileCacheContract
             // Wait for any LOCK_EX that is set if the file is currently written.
             flock($handle, LOCK_SH);
 
+            $stat = fstat($handle);
             // Check if the file is still there since the writing operation could have
             // failed. If the file is gone, retry retrieve.
-            if (fstat($handle)['nlink'] === 0) {
+            if ($stat['nlink'] === 0) {
                 fclose($handle);
+                return $this->retrieve($file);
+            }
+
+            // File caching may have failed and left an empty file in the cache.
+            // Delete the empty file and try to cache the file again.
+            if ($stat['size'] === 0) {
+                fclose($handle);
+                $this->delete(new SplFileInfo($cachedPath));
                 return $this->retrieve($file);
             }
 
