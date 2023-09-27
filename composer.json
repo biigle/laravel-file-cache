@@ -4,16 +4,16 @@
     "type": "library",
     "license": "MIT",
     "require": {
-        "illuminate/console": "^9.0",
-        "illuminate/filesystem": "^9.0",
-        "illuminate/support": "^9.0",
+        "illuminate/console": "^9.0 || ^10.0",
+        "illuminate/filesystem": "^9.0 || ^10.0",
+        "illuminate/support": "^9.0 || ^10.0",
         "symfony/finder": "^6.0",
         "guzzlehttp/guzzle": "^7.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0",
         "mockery/mockery": "^1.2",
-        "laravel/laravel": "^9.0"
+        "laravel/laravel": "^9.0 || ^10.0"
     },
     "authors": [
         {
