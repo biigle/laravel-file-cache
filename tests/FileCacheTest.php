@@ -239,14 +239,15 @@ class FileCacheTest extends TestCase
         $hash = hash('sha256', 'test://test-image.jpg');
 
         $path = "{$this->cachePath}/{$hash}";
-        touch($path, time() - 1);
+        $oldTime = time() - 1;
+        touch($path, $oldTime);
 
         $cache = new FileCacheStub(['path' => $this->cachePath]);
         $cache->stream = 'abc123';
-        $this->assertNotEquals(time(), fileatime($path));
+        $this->assertEquals($oldTime, fileatime($path));
         $this->assertEquals('abc123', $cache->getStream($file));
         clearstatcache();
-        $this->assertEquals(time(), fileatime($path));
+        $this->assertNotEquals($oldTime, fileatime($path));
     }
 
     public function testGetStreamRemote()
