@@ -5,14 +5,17 @@ namespace Biigle\FileCache;
 use Biigle\FileCache\Contracts\File;
 use Biigle\FileCache\Contracts\FileCache as FileCacheContract;
 use Biigle\FileCache\Exceptions\FileIsTooLargeException;
+use Biigle\FileCache\Exceptions\FileLockedException;
 use Biigle\FileCache\Exceptions\MimeTypeIsNotAllowedException;
 use Biigle\FileCache\Exceptions\SourceResourceIsInvalidException;
 use Biigle\FileCache\Exceptions\SourceResourceTimedOutException;
 use Exception;
 use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Psr7\LimitStream;
 use GuzzleHttp\Psr7\Utils;
+use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use SplFileInfo;
@@ -34,7 +37,7 @@ class FileCache implements FileCacheContract
     )
     {
         $this->config = $this->prepareConfig(array_merge(config('file-cache'), $config));
-        $this->client = $client ?: new Client();
+        $this->client = $client ?: $this->makeHttpClient();
         $this->files = $files ?: app('files');
         $this->storage = $storage ?: app('filesystem');
     }
@@ -58,56 +61,57 @@ class FileCache implements FileCacheContract
      * {@inheritdoc}
      *
      * @throws GuzzleException
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileNotFoundException
      * @throws FileIsTooLargeException
      * @throws SourceResourceIsInvalidException
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
      */
-    public function get(File $file, ?callable $callback = null)
+    public function get(File $file, ?callable $callback = null, bool $throwOnLock = false)
     {
         $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultGetCallback']);
 
         return $this->batch([$file], function ($files, $paths) use ($callback) {
-            return $callback($files[0], $paths[0]);
-        });
+            return call_user_func($callback, $files[0], $paths[0]);
+        }, $throwOnLock);
     }
 
     /**
      * {@inheritdoc}
      *
      * @throws GuzzleException
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileNotFoundException
      * @throws FileIsTooLargeException
      * @throws SourceResourceIsInvalidException
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
      */
-    public function getOnce(File $file, ?callable $callback = null)
+    public function getOnce(File $file, ?callable $callback = null, bool $throwOnLock = false)
     {
         $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultGetCallback']);
 
         return $this->batchOnce([$file], function ($files, $paths) use ($callback) {
-            return $callback($files[0], $paths[0]);
-        });
+            return call_user_func($callback, $files[0], $paths[0]);
+        }, $throwOnLock);
     }
 
     /**
      * {@inheritdoc}
      *
      * @throws GuzzleException
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileNotFoundException
      * @throws FileIsTooLargeException
      * @throws SourceResourceIsInvalidException
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
+     * @throws FileLockedException
      */
-    public function batch(array $files, ?callable $callback = null)
+    public function batch(array $files, ?callable $callback = null, bool $throwOnLock = false)
     {
         $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultBatchCallback']);
 
-        $retrieved = array_map(function ($file) {
-            return $this->retrieve($file);
+        $retrieved = array_map(function ($file) use ($throwOnLock) {
+            return $this->retrieve($file, $throwOnLock);
         }, $files);
 
         $paths = array_map(static function ($file) {
@@ -115,7 +119,7 @@ class FileCache implements FileCacheContract
         }, $retrieved);
 
         try {
-            $result = $callback($files, $paths);
+            $result = call_user_func($callback, $files, $paths);
         } finally {
             foreach ($retrieved as $file) {
                 fclose($file['stream']);
@@ -129,18 +133,19 @@ class FileCache implements FileCacheContract
      * {@inheritdoc}
      *
      * @throws GuzzleException
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileNotFoundException
      * @throws FileIsTooLargeException
      * @throws SourceResourceIsInvalidException
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
+     * @throws FileLockedException
      */
-    public function batchOnce(array $files, ?callable $callback = null)
+    public function batchOnce(array $files, ?callable $callback = null, bool $throwOnLock = false)
     {
         $callback = $callback ?? \Closure::fromCallable([static::class, 'defaultBatchCallback']);
 
-        $retrieved = array_map(function ($file) {
-            return $this->retrieve($file);
+        $retrieved = array_map(function ($file) use ($throwOnLock) {
+            return $this->retrieve($file, $throwOnLock);
         }, $files);
 
         $paths = array_map(static function ($file) {
@@ -148,7 +153,7 @@ class FileCache implements FileCacheContract
         }, $retrieved);
 
         try {
-            $result = $callback($files, $paths);
+            $result = call_user_func($callback, $files, $paths);
         } finally {
             foreach ($retrieved as $index => $file) {
                 // Convert to exclusive lock for deletion. Don't delete if lock can't be
@@ -247,24 +252,23 @@ class FileCache implements FileCacheContract
      */
     protected function existsRemote(File $file): bool
     {
-        try {
-            $headers = $this->client->head($this->encodeUrl($file->getUrl()), [
-                'timeout' => $this->config['timeout']
-            ])->getHeaders();
-        } catch (GuzzleException) {
+        $response = $this->client->head($file->getUrl());
+        $code = $response->getStatusCode();
+
+        if ($code < 200 || $code >= 300) {
             return false;
         }
 
         if (!empty($this->config['mime_types'])) {
-            $contentType = $headers['Content-Type'][array_key_last($headers['Content-Type'])] ?? '';
-            $type = trim(explode(';', $contentType)[0]);
+            $type = $response->getHeaderLine('content-type');
+            $type = trim(explode(';', $type)[0]);
             if ($type && !in_array($type, $this->config['mime_types'], true)) {
                 throw MimeTypeIsNotAllowedException::create($type);
             }
         }
 
-        $maxBytes = $this->config['max_file_size'];
-        $size = (int) $headers['Content-Length'][array_key_last($headers['Content-Length'])];
+        $maxBytes = (int) $this->config['max_file_size'];
+        $size = (int) $response->getHeaderLine('content-length');
 
         if ($maxBytes >= 0 && $size > $maxBytes) {
             throw FileIsTooLargeException::create($maxBytes);
@@ -341,13 +345,14 @@ class FileCache implements FileCacheContract
      * stream when finished.
      *
      * @throws GuzzleException
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileNotFoundException
      * @throws FileIsTooLargeException
      * @throws SourceResourceIsInvalidException
      * @throws SourceResourceTimedOutException
      * @throws MimeTypeIsNotAllowedException
+     * @throws FileLockedException
      */
-    protected function retrieve(File $file): array
+    protected function retrieve(File $file, bool $throwOnLock = false): array
     {
         $this->ensurePathExists();
         $cachedPath = $this->getCachedPath($file);
@@ -359,13 +364,27 @@ class FileCache implements FileCacheContract
         if ($cachedFileStream === false) {
             // The file exists, get the file stream in read mode.
             $cachedFileStream = fopen($cachedPath, 'rb');
+
+            if ($throwOnLock && !flock($cachedFileStream, LOCK_SH | LOCK_NB)) {
+                throw new FileLockedException();
+            }
+
             // Wait for any LOCK_EX that is set if the file is currently written.
             flock($cachedFileStream, LOCK_SH);
 
+            $stat = fstat($cachedFileStream);
             // Check if the file is still there since the writing operation could have
             // failed. If the file is gone, retry retrieve.
-            if (fstat($cachedFileStream)['nlink'] === 0) {
+            if ($stat['nlink'] === 0) {
                 fclose($cachedFileStream);
+                return $this->retrieve($file);
+            }
+
+            // File caching may have failed and left an empty file in the cache.
+            // Delete the empty file and try to cache the file again.
+            if ($stat['size'] === 0) {
+                fclose($cachedFileStream);
+                $this->delete(new SplFileInfo($cachedPath));
                 return $this->retrieve($file);
             }
 
@@ -423,7 +442,7 @@ class FileCache implements FileCacheContract
      * @return array
      *
      * @throws GuzzleException
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileNotFoundException
      * @throws FileIsTooLargeException
      * @throws SourceResourceIsInvalidException
      * @throws SourceResourceTimedOutException
@@ -498,7 +517,7 @@ class FileCache implements FileCacheContract
      *
      * @return string
      *
-     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
+     * @throws FileNotFoundException
      * @throws FileIsTooLargeException
      * @throws SourceResourceIsInvalidException
      * @throws SourceResourceTimedOutException
@@ -510,6 +529,9 @@ class FileCache implements FileCacheContract
 
         // Files from the local driver are not cached.
         $source = $disk->readStream($path);
+        if (is_null($source)) {
+            throw new FileNotFoundException();
+        }
 
         $cachedPath = $this->cacheFromResource($file, $source, $target);
         if (is_resource($source)) {
@@ -641,5 +663,20 @@ class FileCache implements FileCacheContract
     protected static function defaultBatchCallback(array $files, array $paths): array
     {
         return $paths;
+    }
+
+    /**
+     * Create a new Guzzle HTTP client.
+     *
+     * @return ClientInterface
+     */
+    protected function makeHttpClient(): ClientInterface
+    {
+        return new Client([
+            'timeout' => $this->config['timeout'],
+            'connect_timeout' => $this->config['connect_timeout'],
+            'read_timeout' => $this->config['read_timeout'],
+            'http_errors' => false,
+        ]);
     }
 }

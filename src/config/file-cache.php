@@ -8,7 +8,7 @@ return [
     'max_file_size' => env('FILE_CACHE_MAX_FILE_SIZE', -1),
 
     /*
-    | Maximum age in minutes of a file in the cache. Older files are pruned.
+    | Maximum age in minutes of an file in the cache. Older files are pruned.
     */
     'max_age' => env('FILE_CACHE_MAX_AGE', 60),
 
@@ -24,11 +24,25 @@ return [
     'path' => storage_path('framework/cache/files'),
 
     /*
-     | Read timeout in seconds for fetching remote files. If the stream transmits
-     | no data for longer than this period (or cannot be established), caching the
-     | file fails.
+     | Total connection timeout when reading remote files in seconds. If
+     | loading the file takes longer than this, it will fail.
+     | Default: 0 (indefinitely)
      */
-    'timeout' => env('FILE_CACHE_TIMEOUT', 5.0),
+    'timeout' => env('FILE_CACHE_TIMEOUT', 0),
+
+    /*
+     | Timeout to initiate a connection to load a remote file in seconds. If
+     | it takes longer, it will fail. Set to 0 to wait indefinitely.
+     | Default: 5.0
+     */
+    'connect_timeout' => env('FILE_CACHE_CONNECT_TIMEOUT', 5.0),
+
+    /*
+     | Timeout for reading a stream of a remote file in seconds. If it takes
+     | longer, it will fail. Set to -1 to wait indefinitely.
+     | Default: 5.0
+     */
+    'read_timeout' => env('FILE_CACHE_READ_TIMEOUT', 5.0),
 
     /*
      | Interval for the scheduled task to prune the file cache.
