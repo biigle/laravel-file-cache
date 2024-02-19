@@ -10,6 +10,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
+use RuntimeException;
 use SplFileInfo;
 use Symfony\Component\Finder\Finder;
 
@@ -220,17 +221,38 @@ class FileCache implements FileCacheContract
             $files = Finder::create()
                 ->files()
                 ->ignoreDotFiles(true)
-                // This will return the least recently accessed files first.
-                ->sortByAccessedTime()
                 ->in($this->config['path'])
                 ->getIterator();
 
-            while ($totalSize > $allowedSize && ($file = $files->current())) {
+            $files = iterator_to_array($files);
+            // This will return the least recently accessed files first.
+            // We use a custom sorting function which ignores errors (because files may
+            // have been deleted in the meantime).
+            uasort($files, function (SplFileInfo $a, SplFileInfo $b) {
+                try {
+                    $aTime = $a->getATime();
+                } catch (RuntimeException $e) {
+                    return 1;
+                }
+
+                try {
+                    $bTime = $b->getATime();
+                } catch (RuntimeException $e) {
+                    return -1;
+                }
+
+                return $aTime - $bTime;
+            });
+
+            foreach ($files as $file) {
+                if ($totalSize <= $allowedSize) {
+                    break;
+                }
+
                 $fileSize = $file->getSize();
                 if ($this->delete($file)) {
                     $totalSize -= $fileSize;
                 }
-                $files->next();
             }
         }
     }
