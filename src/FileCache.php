@@ -207,7 +207,14 @@ class FileCache implements FileCacheContract
 
         // Prune files by age.
         foreach ($files as $file) {
-            if ($now - $file->getATime() > $allowedAge && $this->delete($file)) {
+            try {
+                $aTime = $file->getATime();
+            } catch (RuntimeException $e) {
+                // This can happen if the file is deleted in the meantime.
+                continue;
+            }
+
+            if (($now - $aTime) > $allowedAge && $this->delete($file)) {
                 continue;
             }
 
