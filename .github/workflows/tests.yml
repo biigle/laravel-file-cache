@@ -12,11 +12,8 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        php-version: ['8.1', '8.2']
-        laravel-version: ['^9.0', '^10.0', '^11.0']
-        exclude:
-          - php-version: '8.1'
-            laravel-version: '^11.0'
+        php-version: ['8.2']
+        laravel-version: ['^11.0']
 
     steps:
     - name: Checkout
