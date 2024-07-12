@@ -11,8 +11,8 @@ class FileCacheServiceProviderTest extends TestCase
     public function testScheduledCommand()
     {
         config(['file-cache.prune_interval' => '*/5 * * * *']);
-        $schedule = $this->app[Schedule::class];
-        $event = $schedule->events()[0];
+        $events = $this->app[Schedule::class]->events();
+        $event = end($events);
         $this->assertStringContainsString('prune-file-cache', $event->command);
         $this->assertEquals('*/5 * * * *', $event->expression);
     }
