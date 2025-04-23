@@ -405,6 +405,7 @@ class FileCache implements FileCacheContract
             // The file exists, get the file handle in read mode.
             $handle = fopen($cachedPath, 'r');
             if ($throwOnLock && !flock($handle, LOCK_SH | LOCK_NB)) {
+                fclose($handle);
                 throw new FileLockedException;
             }
 
