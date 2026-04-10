@@ -8,7 +8,6 @@ use Biigle\FileCache\FileCache;
 use Biigle\FileCache\GenericFile;
 use Exception;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
@@ -274,7 +273,7 @@ class FileCacheTest extends TestCase
         $file = new GenericFile('https://example.com/image.jpg');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
 
-        $this->expectException(BadResponseException::class);
+        $this->expectException(Exception::class);
         $cache->getStream($file);
     }
 

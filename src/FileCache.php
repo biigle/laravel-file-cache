@@ -112,7 +112,11 @@ class FileCache implements FileCacheContract
         }
 
         if ($this->isRemote($file)) {
-            return $this->getFileStream($file->getUrl());
+            try {
+                return $this->getFileStream($file->getUrl());
+            } catch (BadResponseException $e) {
+                throw new Exception("The dile does not exist", previous: $e);
+            }
         }
 
         $url = explode('://', $file->getUrl());
