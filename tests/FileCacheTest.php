@@ -86,9 +86,13 @@ class FileCacheTest extends TestCase
         ]);
 
         $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('file is too large');
-        $cache->get($file, $this->noop);
+        try {
+            $cache->get($file, $this->noop);
+            $this->fail('Expected an Exception to be thrown.');
+        } catch (Exception $e) {
+            $this->assertStringContainsString('file is too large', $e->getMessage());
+        }
+        $this->assertFalse(is_resource($cache->stream));
     }
 
     public function testGetDiskDoesNotExist()
@@ -154,7 +158,6 @@ class FileCacheTest extends TestCase
     {
         config(['filesystems.disks.s3' => ['driver' => 's3']]);
         $file = new GenericFile('s3://files/test-image.jpg');
-        $hash = hash('sha256', 's3://files/test-image.jpg');
 
         $stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
 
@@ -168,10 +171,13 @@ class FileCacheTest extends TestCase
             'max_file_size' => 1,
         ]);
 
-        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('file is too large');
-        $path = $cache->get($file, $this->noop);
+        try {
+            $cache->get($file, $this->noop);
+            $this->fail('Expected an Exception to be thrown.');
+        } catch (Exception $e) {
+            $this->assertStringContainsString('file is too large', $e->getMessage());
+        }
+        $this->assertFalse(is_resource($stream));
     }
 
     public function testGetThrowOnLock()
