@@ -109,6 +109,7 @@ class FileCacheTest extends TestCase
         $cache->stream = $stream;
         $path = $cache->get($file, $this->noop);
         $this->assertEquals(3, filesize($path));
+        $this->assertFalse(is_resource($cache->stream));
     }
 
     public function testGetDiskDoesNotExist()
@@ -200,7 +201,6 @@ class FileCacheTest extends TestCase
     {
         config(['filesystems.disks.s3' => ['driver' => 's3']]);
         $file = new GenericFile('s3://files/image.txt');
-        $hash = hash('sha256', 's3://files/image.txt');
 
         $stream = fopen('php://temp', 'r+');
         fwrite($stream, 'abc');

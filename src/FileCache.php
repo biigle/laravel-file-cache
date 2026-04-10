@@ -567,7 +567,14 @@ class FileCache implements FileCacheContract
         $maxBytes = intval($this->config['max_file_size']);
         // Copy one byte more than allowed to detect files that exceed the limit.
         // Using $maxBytes directly would reject files of exactly $maxBytes bytes.
-        $copyLimit = $maxBytes >= 0 ? $maxBytes + 1 : -1;
+        // Clamp at PHP_INT_MAX to avoid overflowing to float for very large limits.
+        if ($maxBytes < 0) {
+            $copyLimit = -1;
+        } elseif ($maxBytes < PHP_INT_MAX) {
+            $copyLimit = $maxBytes + 1;
+        } else {
+            $copyLimit = PHP_INT_MAX;
+        }
         $bytes = stream_copy_to_stream($source, $target, $copyLimit);
 
         if ($bytes === false) {
