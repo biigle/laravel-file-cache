@@ -115,7 +115,7 @@ class FileCache implements FileCacheContract
             try {
                 return $this->getFileStream($file->getUrl());
             } catch (BadResponseException $e) {
-                throw new Exception("The dile does not exist", previous: $e);
+                throw new Exception("The file does not exist", previous: $e);
             }
         }
 
