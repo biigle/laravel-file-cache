@@ -258,10 +258,29 @@ class FileCacheTest extends TestCase
 
     public function testGetStreamRemote()
     {
-        $file = new GenericFile('https://files/test-image.jpg');
-        $cache = new FileCacheStub(['path' => $this->cachePath]);
-        $cache->stream = 'abc123';
-        $this->assertEquals('abc123', $cache->getStream($file));
+        $mock = new MockHandler([new Response(200, [], fopen(__DIR__.'/files/test-image.jpg', 'r'))]);
+        $handlerStack = HandlerStack::create($mock);
+        $client = new Client(['handler' => $handlerStack]);
+
+        $file = new GenericFile('https://example.com/image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath], client: $client);
+
+        $stream = $cache->getStream($file);
+        $this->assertTrue(is_resource($stream));
+        fclose($stream);
+    }
+
+    public function testGetStreamRemoteThrowsOnError()
+    {
+        $mock = new MockHandler([new Response(404)]);
+        $handlerStack = HandlerStack::create($mock);
+        $client = new Client(['handler' => $handlerStack]);
+
+        $file = new GenericFile('https://example.com/image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath], client: $client);
+
+        $this->expectException(Exception::class);
+        $cache->getStream($file);
     }
 
     public function testGetStreamDisk()
@@ -429,10 +448,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(404)]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
@@ -443,10 +459,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(500)]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
@@ -457,10 +470,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(200)]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
@@ -471,10 +481,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(200, ['content-length' => 100])]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache([
@@ -494,10 +501,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(200, ['content-type' => 'application/json'])]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache([
