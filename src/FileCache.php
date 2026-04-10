@@ -417,7 +417,7 @@ class FileCache implements FileCacheContract
             // failed. If the file is gone, retry retrieve.
             if ($stat['nlink'] === 0) {
                 fclose($handle);
-                return $this->retrieve($file);
+                return $this->retrieve(...func_get_args());
             }
 
             // File caching may have failed and left an empty file in the cache.
@@ -425,7 +425,7 @@ class FileCache implements FileCacheContract
             if ($stat['size'] === 0) {
                 fclose($handle);
                 $this->delete(new SplFileInfo($cachedPath));
-                return $this->retrieve($file);
+                return $this->retrieve(...func_get_args());
             }
 
             // The file exists and is no longer written to.
