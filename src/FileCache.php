@@ -484,9 +484,12 @@ class FileCache implements FileCacheContract
     {
         if ($this->isRemote($file)) {
             $source = $this->getFileStream($file->getUrl());
-            $cachedPath = $this->cacheFromResource($file, $source, $handle);
-            if (is_resource($source)) {
-                fclose($source);
+            try {
+                $cachedPath = $this->cacheFromResource($file, $source, $handle);
+            } finally {
+                if (is_resource($source)) {
+                    fclose($source);
+                }
             }
         } else {
             $newCachedPath = $this->getDiskFile($file, $handle);
@@ -533,9 +536,12 @@ class FileCache implements FileCacheContract
             throw new Exception('File does not exist.');
         }
 
-        $cachedPath = $this->cacheFromResource($file, $source, $target);
-        if (is_resource($source)) {
-            fclose($source);
+        try {
+            $cachedPath = $this->cacheFromResource($file, $source, $target);
+        } finally {
+            if (is_resource($source)) {
+                fclose($source);
+            }
         }
 
         return $cachedPath;
@@ -612,7 +618,7 @@ class FileCache implements FileCacheContract
     protected function getFileStream($url)
     {
         if (strpos($url, 'http') === 0) {
-            return $this->client->get($url)->getBody()->detach();
+            return $this->client->get($url, ['stream' => true])->getBody()->detach();
         }
 
         return @fopen($url, 'r');
