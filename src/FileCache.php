@@ -111,7 +111,7 @@ class FileCache implements FileCacheContract
         }
 
         if ($this->isRemote($file)) {
-            return $this->getFileStream($cachedPath);
+            return $this->getFileStream($file->getUrl());
         }
 
         $url = explode('://', $file->getUrl());

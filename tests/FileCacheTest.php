@@ -252,10 +252,16 @@ class FileCacheTest extends TestCase
 
     public function testGetStreamRemote()
     {
-        $file = new GenericFile('https://files/test-image.jpg');
-        $cache = new FileCacheStub(['path' => $this->cachePath]);
-        $cache->stream = 'abc123';
-        $this->assertEquals('abc123', $cache->getStream($file));
+        $mock = new MockHandler([new Response(200, [], fopen(__DIR__.'/files/test-image.jpg', 'r'))]);
+        $handlerStack = HandlerStack::create($mock);
+        $client = new Client(['handler' => $handlerStack, 'http_errors' => false]);
+
+        $file = new GenericFile('https://example.com/image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath], client: $client);
+
+        $stream = $cache->getStream($file);
+        $this->assertTrue(is_resource($stream));
+        fclose($stream);
     }
 
     public function testGetStreamDisk()
