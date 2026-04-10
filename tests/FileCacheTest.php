@@ -557,6 +557,50 @@ class FileCacheTest extends TestCase
             $this->assertStringContainsString("type 'application/json' not allowed", $e->getMessage());
         }
     }
+
+    public function testExistsRemoteMissingContentLength()
+    {
+        // A response without content-length when max_file_size is set must fail,
+        // because the size cannot be verified upfront.
+        $mock = new MockHandler([new Response(200)]);
+        $handlerStack = HandlerStack::create($mock);
+        $client = new Client([
+            'handler' => $handlerStack,
+            'http_errors' => false,
+        ]);
+
+        $file = new GenericFile('https://example.com/file');
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_file_size' => 50,
+        ], client: $client);
+
+        try {
+            $cache->exists($file);
+            $this->fail('Expected an Exception to be thrown.');
+        } catch (Exception $e) {
+            $this->assertStringContainsString('content-length', $e->getMessage());
+        }
+    }
+
+    public function testExistsRemoteMissingContentLengthNoLimit()
+    {
+        // When max_file_size is -1 (no limit), a missing content-length is fine.
+        $mock = new MockHandler([new Response(200)]);
+        $handlerStack = HandlerStack::create($mock);
+        $client = new Client([
+            'handler' => $handlerStack,
+            'http_errors' => false,
+        ]);
+
+        $file = new GenericFile('https://example.com/file');
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_file_size' => -1,
+        ], client: $client);
+
+        $this->assertTrue($cache->exists($file));
+    }
 }
 
 class FileCacheStub extends FileCache

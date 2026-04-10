@@ -319,10 +319,21 @@ class FileCache implements FileCacheContract
         }
 
         $maxBytes = intval($this->config['max_file_size']);
-        $size = intval($response->getHeaderLine('content-length'));
 
-        if ($maxBytes >= 0 && $size > $maxBytes) {
-            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+        if ($maxBytes >= 0) {
+            $contentLength = $response->getHeaderLine('content-length');
+
+            $contentLength = filter_var($contentLength, FILTER_VALIDATE_INT, [
+                'options' => ['min_range' => 0],
+            ]);
+
+            if ($contentLength === false) {
+                throw new Exception("File size could not be determined (missing or invalid content-length header).");
+            }
+
+            if ($contentLength > $maxBytes) {
+                throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+            }
         }
 
         return true;
