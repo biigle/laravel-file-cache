@@ -8,6 +8,7 @@ use Biigle\FileCache\FileCache;
 use Biigle\FileCache\GenericFile;
 use Exception;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
@@ -254,7 +255,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(200, [], fopen(__DIR__.'/files/test-image.jpg', 'r'))]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client(['handler' => $handlerStack, 'http_errors' => false]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/image.jpg');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
@@ -262,6 +263,19 @@ class FileCacheTest extends TestCase
         $stream = $cache->getStream($file);
         $this->assertTrue(is_resource($stream));
         fclose($stream);
+    }
+
+    public function testGetStreamRemoteThrowsOnError()
+    {
+        $mock = new MockHandler([new Response(404)]);
+        $handlerStack = HandlerStack::create($mock);
+        $client = new Client(['handler' => $handlerStack]);
+
+        $file = new GenericFile('https://example.com/image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath], client: $client);
+
+        $this->expectException(BadResponseException::class);
+        $cache->getStream($file);
     }
 
     public function testGetStreamDisk()
@@ -429,10 +443,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(404)]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
@@ -443,10 +454,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(500)]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
@@ -457,10 +465,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(200)]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache(['path' => $this->cachePath], client: $client);
@@ -471,10 +476,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(200, ['content-length' => 100])]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache([
@@ -494,10 +496,7 @@ class FileCacheTest extends TestCase
     {
         $mock = new MockHandler([new Response(200, ['content-type' => 'application/json'])]);
         $handlerStack = HandlerStack::create($mock);
-        $client = new Client([
-            'handler' => $handlerStack,
-            'http_errors' => false,
-        ]);
+        $client = new Client(['handler' => $handlerStack]);
 
         $file = new GenericFile('https://example.com/file');
         $cache = new FileCache([

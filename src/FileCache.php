@@ -8,6 +8,7 @@ use Biigle\FileCache\Exceptions\FileLockedException;
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\BadResponseException;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
 use RuntimeException;
@@ -293,7 +294,12 @@ class FileCache implements FileCacheContract
      */
     protected function existsRemote($file)
     {
-        $response = $this->client->head($file->getUrl());
+        try {
+            $response = $this->client->head($file->getUrl());
+        } catch (BadResponseException $e) {
+            return false;
+        }
+
         $code = $response->getStatusCode();
 
         if ($code < 200 || $code >= 300) {
@@ -656,7 +662,6 @@ class FileCache implements FileCacheContract
             'timeout' => $this->config['timeout'],
             'connect_timeout' => $this->config['connect_timeout'],
             'read_timeout' => $this->config['read_timeout'],
-            'http_errors' => false,
         ]);
     }
 }
