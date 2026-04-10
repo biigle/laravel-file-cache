@@ -95,6 +95,22 @@ class FileCacheTest extends TestCase
         $this->assertFalse(is_resource($cache->stream));
     }
 
+    public function testGetRemoteExactlyMaxSize()
+    {
+        $file = new GenericFile('https://files/image.jpg');
+        $cache = new FileCacheStub([
+            'path' => $this->cachePath,
+            'max_file_size' => 3,
+        ]);
+
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, 'abc');
+        rewind($stream);
+        $cache->stream = $stream;
+        $path = $cache->get($file, $this->noop);
+        $this->assertEquals(3, filesize($path));
+    }
+
     public function testGetDiskDoesNotExist()
     {
         $file = new GenericFile('abc://files/image.jpg');
@@ -177,6 +193,31 @@ class FileCacheTest extends TestCase
         } catch (Exception $e) {
             $this->assertStringContainsString('file is too large', $e->getMessage());
         }
+        $this->assertFalse(is_resource($stream));
+    }
+
+    public function testGetDiskCloudExactlyMaxSize()
+    {
+        config(['filesystems.disks.s3' => ['driver' => 's3']]);
+        $file = new GenericFile('s3://files/image.txt');
+        $hash = hash('sha256', 's3://files/image.txt');
+
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, 'abc');
+        rewind($stream);
+
+        $mock = Mockery::mock();
+        $mock->shouldReceive('disk')->once()->with('s3')->andReturn($mock);
+        $mock->shouldReceive('readStream')->once()->andReturn($stream);
+        $this->app['filesystem'] = $mock;
+
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_file_size' => 3,
+        ]);
+
+        $path = $cache->get($file, $this->noop);
+        $this->assertEquals(3, filesize($path));
         $this->assertFalse(is_resource($stream));
     }
 

@@ -565,14 +565,17 @@ class FileCache implements FileCacheContract
 
         $cachedPath = $this->getCachedPath($file);
         $maxBytes = intval($this->config['max_file_size']);
-        $bytes = stream_copy_to_stream($source, $target, $maxBytes);
-
-        if ($bytes === $maxBytes) {
-            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
-        }
+        // Copy one byte more than allowed to detect files that exceed the limit.
+        // Using $maxBytes directly would reject files of exactly $maxBytes bytes.
+        $copyLimit = $maxBytes >= 0 ? $maxBytes + 1 : -1;
+        $bytes = stream_copy_to_stream($source, $target, $copyLimit);
 
         if ($bytes === false) {
             throw new Exception('The source resource is invalid.');
+        }
+
+        if ($maxBytes >= 0 && $bytes > $maxBytes) {
+            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
         }
 
         $metadata = stream_get_meta_data($source);
