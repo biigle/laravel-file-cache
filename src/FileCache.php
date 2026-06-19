@@ -400,7 +400,7 @@ class FileCache implements FileCacheContract
             $stat = fstat($handle);
             // Reference links exist, so the file is still in use. This is an optimization
             // and not strictly required as the check is performed again below.
-            if ($stat['nlink'] > 1) {
+            if ($stat && $stat['nlink'] > 1) {
                 return false;
             }
 
@@ -409,7 +409,7 @@ class FileCache implements FileCacheContract
                 // Re-check after acquiring the lock to guard the race between
                 // the nlink check and the lock acquisition.
                 $stat = fstat($handle);
-                if ($stat['nlink'] === 1) {
+                if ($stat && $stat['nlink'] === 1) {
                     $this->files->delete($path);
                     $deleted = true;
                 }
@@ -598,9 +598,13 @@ class FileCache implements FileCacheContract
         $this->linkCount += 1;
         // Create the reference link while the lock on the canonical file is
         // still held so the pruner cannot delete it before the link exists.
-        link($cachedPath, $link);
+        $success = @link($cachedPath, $link);
 
         fclose($handle);
+
+        if (!$success) {
+            throw new RuntimeException("Failed to create reference link '{$link}' for cached file '{$cachedPath}'.");
+        }
 
         return $link;
     }
@@ -652,10 +656,9 @@ class FileCache implements FileCacheContract
         $dir = $this->lockDir();
         $this->ensureDirExists($dir);
 
-        do {
-            $token = bin2hex(random_bytes(16));
-            $handle = @fopen($this->lockPath($token), 'x');
-        } while ($handle === false);
+        // A token collision is extremely unlikely, no need to guard.
+        $token = bin2hex(random_bytes(16));
+        $handle = @fopen($this->lockPath($token), 'x');
 
         $this->lockToken = $token;
         $this->lockHandle = $handle;
@@ -817,12 +820,11 @@ class FileCache implements FileCacheContract
             ->files()
             ->in($dir)
             ->filter(function (SplFileInfo $file) use ($maxMTime) {
-                if (@filemtime($file) > $maxMTime) {
+                if ($file->getMTime() > $maxMTime) {
                     return false;
                 }
 
-                $token = basename($file);
-                return !$this->isProcessAlive($token);
+                return !$this->isProcessAlive($file->getFilename());
             })
             ->getIterator();
 
