@@ -665,6 +665,7 @@ class FileCache implements FileCacheContract
         }
 
         if (!flock($handle, LOCK_EX)) {
+            @unlink($path);
             throw new RuntimeException("Could not get lock on file {$path}");
         }
 
