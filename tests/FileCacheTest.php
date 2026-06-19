@@ -425,6 +425,101 @@ class FileCacheTest extends TestCase
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
     }
 
+    public function testPruneKeepsReferencedFile()
+    {
+        $this->app['files']->put("{$this->cachePath}/abc", 'abc');
+        touch("{$this->cachePath}/abc", time() - 61);
+
+        $this->app['files']->makeDirectory("{$this->cachePath}/.locks", 0755, false, true);
+        $this->app['files']->makeDirectory("{$this->cachePath}/.refs", 0755, false, true);
+
+        // Simulate a live worker: hold an exclusive lock on its lock file and
+        // keep a reference link to the cached file.
+        $lock = fopen("{$this->cachePath}/.locks/token", 'c');
+        flock($lock, LOCK_EX);
+        link("{$this->cachePath}/abc", "{$this->cachePath}/.refs/token.0");
+
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_age' => 1,
+        ]);
+        $cache->prune();
+
+        // The live reference protects the file and is left in place.
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/abc"));
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/.refs/token.0"));
+
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+
+    public function testPruneReapsStaleReference()
+    {
+        $this->app['files']->put("{$this->cachePath}/abc", 'abc');
+        touch("{$this->cachePath}/abc", time() - 61);
+
+        $this->app['files']->makeDirectory("{$this->cachePath}/.refs", 0755, false, true);
+        // Reference link of a crashed worker: no lock file exists for its token,
+        // so the owning process counts as dead.
+        link("{$this->cachePath}/abc", "{$this->cachePath}/.refs/token.0");
+
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_age' => 1,
+        ]);
+        $cache->prune();
+
+        // The stale reference is reaped, which makes the file prunable.
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/.refs/token.0"));
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
+    }
+
+    public function testPruneReapsOrphanLockFile()
+    {
+        $this->app['files']->makeDirectory("{$this->cachePath}/.locks", 0755, false, true);
+        $lockFile = "{$this->cachePath}/.locks/token";
+        // An unlocked lock file old enough to be past the grace window belongs
+        // to a crashed worker.
+        touch($lockFile, time() - 2);
+
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $cache->prune();
+
+        $this->assertFalse($this->app['files']->exists($lockFile));
+    }
+
+    public function testGetCreatesReferenceLink()
+    {
+        $file = new GenericFile('fixtures://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->get($file, function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // A reference link exists while the callback runs (without an open file
+        // handle per file)...
+        $this->assertCount(1, $linksDuringCallback);
+        // ...and is removed once the callback returns.
+        $this->assertCount(0, glob("{$this->cachePath}/.refs/*"));
+    }
+
+    public function testBatchCreatesReferenceLink()
+    {
+        $file = new GenericFile('fixtures://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->batch([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // A reference link exists while the callback runs (without an open file
+        // handle per file)...
+        $this->assertCount(1, $linksDuringCallback);
+        // ...and is removed once the callback returns.
+        $this->assertCount(0, glob("{$this->cachePath}/.refs/*"));
+    }
+
     public function testMimeTypeWhitelist()
     {
         $cache = new FileCache([

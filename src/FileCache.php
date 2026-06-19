@@ -20,6 +20,27 @@ use Symfony\Component\Finder\Finder;
  */
 class FileCache implements FileCacheContract
 {
+    /**
+     * Name of the subdirectory in the cache path that holds the per-process
+     * lock files.
+     *
+     * @var string
+     */
+    const LOCK_DIR = '.locks';
+
+    /**
+     * Name of the subdirectory in the cache path that holds the reference links.
+     *
+     * @var string
+     */
+    const REFS_DIR = '.refs';
+
+    /**
+     * Counter for reference links used to generate unique names per instance.
+     *
+     * @var integer
+     */
+    protected $linkCount = 0;
 
     /**
      * File cache configuration.
@@ -50,6 +71,22 @@ class FileCache implements FileCacheContract
     protected $client;
 
     /**
+     * Open file handle holding the exclusive lock that signals this process is
+     * alive. Created lazily and held for the lifetime of the process.
+     *
+     * @var resource|null
+     */
+    protected $lockHandle;
+
+    /**
+     * Unique token identifying this process. Embedded in every reference link
+     * name and used as the name of this process' lock file.
+     *
+     * @var string|null
+     */
+    protected $lockToken;
+
+    /**
      * Create an instance.
      *
      * @param array $config Optional custom configuration.
@@ -62,6 +99,22 @@ class FileCache implements FileCacheContract
         $this->files = $files ?: app('files');
         $this->storage = $storage ?: app('filesystem');
         $this->client = $client ?: $this->makeHttpClient();
+    }
+
+    /**
+     * Release the process lock when the instance is destroyed. If this does not
+     * run (e.g. on a crash) the kernel releases the lock anyway and the orphan
+     * lock file is reaped by the pruner.
+     */
+    public function __destruct()
+    {
+        if (!is_resource($this->lockHandle)) {
+            return;
+        }
+
+        // Also releases the LOCK_EX.
+        fclose($this->lockHandle);
+        @unlink($this->lockPath($this->lockToken));
     }
 
     /**
@@ -149,7 +202,16 @@ class FileCache implements FileCacheContract
             $result = call_user_func($callback, $files, $paths);
         } finally {
             foreach ($retrieved as $file) {
-                fclose($file['handle']);
+                // Locally stored files have no reference link and must not be
+                // deleted.
+                if (is_null($file['link'])) {
+                    continue;
+                }
+
+                // Update the atime so the pruner knows when the file was last used.
+                // May be relevant for (hours-)long batches.
+                @touch($file['link']);
+                @unlink($file['link']);
             }
         }
 
@@ -172,18 +234,15 @@ class FileCache implements FileCacheContract
         try {
             $result = call_user_func($callback, $files, $paths);
         } finally {
-            foreach ($retrieved as $index => $file) {
-                // Convert to exclusive lock for deletion. Don't delete if lock can't be
-                // obtained.
-                if (flock($file['handle'], LOCK_EX | LOCK_NB)) {
-                    // This path is not the same than $file['path'] for locally stored
-                    // files. We don't want to delete locally stored files.
-                    $path = $this->getCachedPath($files[$index]);
-                    if ($this->files->exists($path)) {
-                        $this->files->delete($path);
-                    }
+            foreach ($retrieved as $file) {
+                // Locally stored files have no reference link and must not be
+                // deleted.
+                if (is_null($file['link'])) {
+                    continue;
                 }
-                fclose($file['handle']);
+
+                @unlink($file['link']);
+                $this->delete(new SplFileInfo($file['path']));
             }
         }
 
@@ -199,74 +258,14 @@ class FileCache implements FileCacheContract
             return;
         }
 
-        $now = time();
-        // Allowed age in seconds.
-        $allowedAge = $this->config['max_age'] * 60;
-        $totalSize = 0;
+        // Remove reference links and lock files of crashed workers so that
+        // files only referenced by dead workers become eligible for pruning.
+        $this->pruneStaleReferences();
+        $this->pruneOrphanLockFiles();
 
-        $files = Finder::create()
-            ->files()
-            ->ignoreDotFiles(true)
-            ->in($this->config['path'])
-            ->getIterator();
+        $currentSize = $this->pruneFilesByMaxAge();
 
-        // Prune files by age.
-        foreach ($files as $file) {
-            try {
-                $aTime = $file->getATime();
-            } catch (RuntimeException $e) {
-                // This can happen if the file is deleted in the meantime.
-                continue;
-            }
-
-            if (($now - $aTime) > $allowedAge && $this->delete($file)) {
-                continue;
-            }
-
-            $totalSize += $file->getSize();
-        }
-
-        $allowedSize = $this->config['max_size'];
-
-        // Prune files by cache size.
-        if ($totalSize > $allowedSize) {
-            $files = Finder::create()
-                ->files()
-                ->ignoreDotFiles(true)
-                ->in($this->config['path'])
-                ->getIterator();
-
-            $files = iterator_to_array($files);
-            // This will return the least recently accessed files first.
-            // We use a custom sorting function which ignores errors (because files may
-            // have been deleted in the meantime).
-            uasort($files, function (SplFileInfo $a, SplFileInfo $b) {
-                try {
-                    $aTime = $a->getATime();
-                } catch (RuntimeException $e) {
-                    return 1;
-                }
-
-                try {
-                    $bTime = $b->getATime();
-                } catch (RuntimeException $e) {
-                    return -1;
-                }
-
-                return $aTime - $bTime;
-            });
-
-            foreach ($files as $file) {
-                if ($totalSize <= $allowedSize) {
-                    break;
-                }
-
-                $fileSize = $file->getSize();
-                if ($this->delete($file)) {
-                    $totalSize -= $fileSize;
-                }
-            }
-        }
+        $this->pruneFilesByMaxSize($currentSize);
     }
 
     /**
@@ -278,11 +277,12 @@ class FileCache implements FileCacheContract
             return;
         }
 
-        $files = Finder::create()
-            ->files()
-            ->ignoreDotFiles(true)
-            ->in($this->config['path'])
-            ->getIterator();
+        // Remove reference links and lock files of crashed workers so that
+        // files only referenced by dead workers become eligible for deletion.
+        $this->pruneStaleReferences();
+        $this->pruneOrphanLockFiles();
+
+        $files = $this->canonicalFiles()->getIterator();
 
         foreach ($files as $file) {
             $this->delete($file);
@@ -383,14 +383,36 @@ class FileCache implements FileCacheContract
      */
     protected function delete(SplFileInfo $file)
     {
-        $handle = fopen($file->getRealPath(), 'r');
+        $path = $file->getRealPath();
+        // The file may already be gone (e.g. pruned concurrently).
+        if ($path === false) {
+            return false;
+        }
+
+        $handle = @fopen($path, 'r');
+        if ($handle === false) {
+            return false;
+        }
+
         $deleted = false;
 
         try {
+            $stat = fstat($handle);
+            // Reference links exist, so the file is still in use. This is an optimization
+            // and not strictly required as the check is performed again below.
+            if ($stat['nlink'] > 1) {
+                return false;
+            }
+
             // Only delete the file if it is not currently used. Else move on.
             if (flock($handle, LOCK_EX | LOCK_NB)) {
-                $this->files->delete($file->getRealPath());
-                $deleted = true;
+                // Re-check after acquiring the lock to guard the race between
+                // the nlink check and the lock acquisition.
+                $stat = fstat($handle);
+                if ($stat['nlink'] === 1) {
+                    $this->files->delete($path);
+                    $deleted = true;
+                }
             }
         } finally {
             fclose($handle);
@@ -409,13 +431,13 @@ class FileCache implements FileCacheContract
      * @throws Exception If the file could not be cached.
      * @throws FileLockedException If the file is locked and `throwOnLock` was `true`.
      *
-     *
-     * @return array Containing the 'path' to the file and the file 'handle'. Close the
-     * handle when finished.
+     * @return array Containing the 'path' to the file and the reference 'link'
+     * (or `null` for locally stored files). Unlink the reference link when
+     * finished.
      */
     protected function retrieve(File $file, bool $throwOnLock = false)
     {
-        $this->ensurePathExists();
+        $this->ensureDirExists($this->config['path']);
         $cachedPath = $this->getCachedPath($file);
 
         // This will return false if the file already exists. Else it will create it in
@@ -458,9 +480,7 @@ class FileCache implements FileCacheContract
         flock($handle, LOCK_EX);
 
         try {
-            $fileInfo = $this->retrieveNewFile($file, $cachedPath, $handle);
-            // Convert the lock so other workers can use the file from now on.
-            flock($handle, LOCK_SH);
+            return $this->retrieveNewFile($file, $cachedPath, $handle);
         } catch (Exception $e) {
             // Remove the empty file if writing failed. This is the case that is caught
             // by 'nlink' === 0 above.
@@ -468,12 +488,10 @@ class FileCache implements FileCacheContract
             fclose($handle);
             throw new Exception("Error while caching file '{$file->getUrl()}': {$e->getMessage()}");
         }
-
-        return $fileInfo;
     }
 
     /**
-     * Get path and handle for a file that exists in the cache.
+     * Get path and reference link for a file that exists in the cache.
      *
      * @param string $cachedPath
      * @param resource $handle
@@ -488,12 +506,12 @@ class FileCache implements FileCacheContract
 
         return [
             'path' => $cachedPath,
-            'handle' => $handle,
+            'link' => $this->createReferenceLink($cachedPath, $handle),
         ];
     }
 
     /**
-     * Get path and handle for a file that does not yet exist in the cache.
+     * Get path and reference link for a file that does not yet exist in the cache.
      *
      * @param File $file
      * @param string $cachedPath
@@ -503,6 +521,8 @@ class FileCache implements FileCacheContract
      */
     protected function retrieveNewFile(File $file, $cachedPath, $handle)
     {
+        $isLocal = false;
+
         if ($this->isRemote($file)) {
             $source = $this->getFileStream($file->getUrl());
             try {
@@ -516,9 +536,12 @@ class FileCache implements FileCacheContract
             $newCachedPath = $this->getDiskFile($file, $handle);
 
             // If it is a locally stored file, delete the empty "placeholder"
-            // file again. The handle may stay open; it doesn't matter.
+            // file again. The handle is closed below.
             if ($newCachedPath !== $cachedPath) {
                 unlink($cachedPath);
+                // Locally stored files are not managed by the cache, so they
+                // must not be reference-linked or deleted.
+                $isLocal = true;
             }
 
             $cachedPath = $newCachedPath;
@@ -531,10 +554,313 @@ class FileCache implements FileCacheContract
             }
         }
 
+        $link = null;
+
+        if ($isLocal) {
+            fclose($handle);
+        } else {
+            // Convert the lock so other workers can use the file immediately.
+            flock($handle, LOCK_SH);
+
+            // Non-local (cached) files get a reference link that exists as long as the
+            // file is needed (e.g. during batch()).
+            $link = $this->createReferenceLink($cachedPath, $handle);
+        }
+
         return [
             'path' => $cachedPath,
-            'handle' => $handle,
+            'link' => $link,
         ];
+    }
+
+    /**
+     * Create the reference link that signals the cached file is in use and
+     * release the lock handle.
+     *
+     * @param string $cachedPath
+     * @param resource $handle
+     *
+     * @return string Path to the reference link.
+     */
+    protected function createReferenceLink($cachedPath, $handle): string
+    {
+        // Acquire the process lock before creating the reference link so the
+        // link always has a live, lock-holding owner from the moment it
+        // exists.
+        $this->ensureProcessLock();
+
+        $dir = $this->refsDir();
+        $this->ensureDirExists($dir);
+
+        // The token identifies the owning process. The suffix keeps the
+        // name unique across multiple references held by the same process.
+        $link = "{$dir}/{$this->lockToken}.{$this->linkCount}";
+        $this->linkCount += 1;
+        // Create the reference link while the lock on the canonical file is
+        // still held so the pruner cannot delete it before the link exists.
+        link($cachedPath, $link);
+
+        fclose($handle);
+
+        return $link;
+    }
+
+    /**
+     * Get a Finder for the canonical cache files, excluding reference links and
+     * lock files.
+     *
+     * @return Finder
+     */
+    protected function canonicalFiles(): Finder
+    {
+        return Finder::create()
+            ->files()
+            ->ignoreDotFiles(true)
+            ->exclude(self::REFS_DIR)
+            ->exclude(self::LOCK_DIR)
+            ->in($this->config['path']);
+    }
+
+    /**
+     * Extract the owning process' lock token from a reference link filename.
+     *
+     * @param string $filename
+     *
+     * @return string
+     */
+    protected function referenceLinkToken($filename)
+    {
+        return explode('.', $filename)[0] ?: '';
+    }
+
+    /**
+     * Acquire the lock that signals this process is alive, holding it for the
+     * lifetime of the process.
+     *
+     * The lock is created lazily the first time a reference link is needed. The
+     * kernel releases it when the process exits (including crashes), which is
+     * how the pruner detects that this worker's reference links are stale.
+     * flock also works across (Docker) containers sharing the cache volume because
+     * the lock lives in the host kernel on the shared inode.
+     */
+    protected function ensureProcessLock()
+    {
+        if (is_resource($this->lockHandle)) {
+            return;
+        }
+
+        $dir = $this->lockDir();
+        $this->ensureDirExists($dir);
+
+        do {
+            $token = bin2hex(random_bytes(16));
+            $handle = @fopen($this->lockPath($token), 'x');
+        } while ($handle === false);
+
+        $this->lockToken = $token;
+        $this->lockHandle = $handle;
+        flock($this->lockHandle, LOCK_EX);
+    }
+
+    /**
+     * Determine whether the process owning the given lock token is still alive.
+     *
+     * @return bool
+     */
+    protected function isProcessAlive(string $token)
+    {
+        // This process obviously is alive.
+        if ($token === $this->lockToken) {
+            return true;
+        }
+
+        $handle = @fopen($this->lockPath($token), 'r');
+        // No lock file means the owning process is gone.
+        if ($handle === false) {
+            return false;
+        }
+
+        try {
+            // If the exclusive lock can be acquired, the owning process no
+            // longer holds it and has therefore terminated. The probe lock is
+            // released by the fclose below.
+            if (flock($handle, LOCK_EX | LOCK_NB)) {
+                return false;
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        return true;
+    }
+
+    /**
+     * Remove reference links left behind by crashed workers.
+     */
+    protected function pruneStaleReferences()
+    {
+        $dir = $this->refsDir();
+        if (!$this->files->exists($dir)) {
+            return;
+        }
+
+        $links = Finder::create()
+            ->files()
+            ->in($dir)
+            ->filter(function (SplFileInfo $file) {
+                // We only want to delete references of dead processes.
+                return !$this->isProcessAlive(
+                    $this->referenceLinkToken($file->getFilename())
+                );
+            })
+            ->getIterator();
+
+        foreach ($links as $link) {
+            @unlink($link->getRealPath());
+        }
+    }
+
+    /**
+     * Prune canonical files that are older than max_age.
+     *
+     * @return int The total size in bytes of the remaining files.
+     */
+    protected function pruneFilesByMaxAge(): int
+    {
+        $now = time();
+        // Allowed age in seconds.
+        $allowedAge = $this->config['max_age'] * 60;
+        $totalSize = 0;
+
+        $files = $this->canonicalFiles()->getIterator();
+
+        // Prune files by age.
+        foreach ($files as $file) {
+            try {
+                $aTime = $file->getATime();
+            } catch (RuntimeException $e) {
+                // This can happen if the file is deleted in the meantime.
+                continue;
+            }
+
+            if (($now - $aTime) > $allowedAge && $this->delete($file)) {
+                continue;
+            }
+
+            $totalSize += $file->getSize();
+        }
+
+        return $totalSize;
+    }
+
+    /**
+     * Prune oldest canonical files that exceed the max_size.
+     *
+     * @param int $currentSize Current total size of the files.
+     */
+    protected function pruneFilesByMaxSize(int $currentSize)
+    {
+        $allowedSize = $this->config['max_size'];
+
+        if ($currentSize <= $allowedSize) {
+            return;
+        }
+
+        // This will return the least recently accessed files first.
+        // We use a custom sorting function which ignores errors (because files may
+        // have been deleted in the meantime).
+        $files = $this->canonicalFiles()
+            ->sort(function (SplFileInfo $a, SplFileInfo $b) {
+                try {
+                    $aTime = $a->getATime();
+                } catch (RuntimeException $e) {
+                    return 1;
+                }
+
+                try {
+                    $bTime = $b->getATime();
+                } catch (RuntimeException $e) {
+                    return -1;
+                }
+
+                return $aTime - $bTime;
+            })
+            ->getIterator();
+
+        foreach ($files as $file) {
+            if ($currentSize <= $allowedSize) {
+                break;
+            }
+
+            $fileSize = $file->getSize();
+            if ($this->delete($file)) {
+                $currentSize -= $fileSize;
+            }
+        }
+    }
+
+    /**
+     * Remove lock files of processes that have terminated.
+     */
+    protected function pruneOrphanLockFiles()
+    {
+        $dir = $this->lockDir();
+        if (!$this->files->exists($dir)) {
+            return;
+        }
+
+        // Only consider lock files older than 1 s to rule out the brief window
+        // between creating a fresh lock file and acquiring its lock.
+        $maxMTime = time() - 1;
+
+        $lockFiles = Finder::create()
+            ->files()
+            ->in($dir)
+            ->filter(function (SplFileInfo $file) use ($maxMTime) {
+                if (@filemtime($file) > $maxMTime) {
+                    return false;
+                }
+
+                $token = basename($file);
+                return !$this->isProcessAlive($token);
+            })
+            ->getIterator();
+
+        foreach ($lockFiles as $file) {
+            @unlink($file->getRealPath());
+        }
+    }
+
+    /**
+     * Get the directory in which process lock files are stored.
+     *
+     * @return string
+     */
+    protected function lockDir()
+    {
+        return "{$this->config['path']}/".self::LOCK_DIR;
+    }
+
+    /**
+     * Get the directory in which reference links are stored.
+     *
+     * @return string
+     */
+    protected function refsDir()
+    {
+        return "{$this->config['path']}/".self::REFS_DIR;
+    }
+
+    /**
+     * Get the path to the lock file for the given process token.
+     *
+     * @param string $token
+     *
+     * @return string
+     */
+    protected function lockPath($token)
+    {
+        return "{$this->lockDir()}/{$token}";
     }
 
     /**
@@ -616,12 +942,12 @@ class FileCache implements FileCacheContract
     }
 
     /**
-     * Creates the cache directory if it doesn't exist yet.
+     * Creates the directory if it doesn't exist yet.
      */
-    protected function ensurePathExists()
+    protected function ensureDirExists(string $dir)
     {
-        if (!$this->files->exists($this->config['path'])) {
-            $this->files->makeDirectory($this->config['path'], 0755, true, true);
+        if (!$this->files->exists($dir)) {
+            $this->files->makeDirectory($dir, 0755, true, true);
         }
     }
 
