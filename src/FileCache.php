@@ -658,11 +658,18 @@ class FileCache implements FileCacheContract
 
         // A token collision is extremely unlikely, no need to guard.
         $token = bin2hex(random_bytes(16));
-        $handle = @fopen($this->lockPath($token), 'x');
+        $path = $this->lockPath($token);
+        $handle = @fopen($path, 'x');
+        if ($handle === false) {
+            throw new RuntimeException("Could not create lock file at {$path}");
+        }
+
+        if (!flock($handle, LOCK_EX)) {
+            throw new RuntimeException("Could not get lock on file {$path}");
+        }
 
         $this->lockToken = $token;
         $this->lockHandle = $handle;
-        flock($this->lockHandle, LOCK_EX);
     }
 
     /**
@@ -719,7 +726,9 @@ class FileCache implements FileCacheContract
             ->getIterator();
 
         foreach ($links as $link) {
-            @unlink($link->getRealPath());
+            if (($path = $link->getRealPath())) {
+                @unlink($path);
+            }
         }
     }
 
@@ -829,7 +838,9 @@ class FileCache implements FileCacheContract
             ->getIterator();
 
         foreach ($lockFiles as $file) {
-            @unlink($file->getRealPath());
+            if (($path = $file->getRealPath())) {
+                @unlink($path);
+            }
         }
     }
 
