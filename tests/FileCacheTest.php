@@ -372,7 +372,16 @@ class FileCacheTest extends TestCase
     {
         $file = new GenericFile('fixtures://test-image.jpg');
         $hash = hash('sha256', 'fixtures://test-image.jpg');
-        (new FileCache(['path' => $this->cachePath]))->batchOnce([$file], $this->noop);
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->batchOnce([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // A reference link exists while the callback runs...
+        $this->assertCount(1, $linksDuringCallback);
+        // ...and afterwards both the link and the canonical file are removed.
+        $this->assertCount(0, glob("{$this->cachePath}/.refs/*"));
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
@@ -425,7 +434,7 @@ class FileCacheTest extends TestCase
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
     }
 
-    public function testPruneKeepsReferencedFile()
+    public function testPruneByMaxAgeKeepsReferencedFile()
     {
         $this->app['files']->put("{$this->cachePath}/abc", 'abc');
         touch("{$this->cachePath}/abc", time() - 61);
@@ -448,6 +457,34 @@ class FileCacheTest extends TestCase
         // The live reference protects the file and is left in place.
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/abc"));
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/.refs/token.0"));
+
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+
+    public function testPruneByMaxSizeKeepsReferencedFile()
+    {
+        $this->app['files']->put("{$this->cachePath}/abc", 'abc');
+
+        $this->app['files']->makeDirectory("{$this->cachePath}/.locks", 0755, false, true);
+        $this->app['files']->makeDirectory("{$this->cachePath}/.refs", 0755, false, true);
+
+        // Simulate a live worker: hold an exclusive lock on its lock file and
+        // keep a reference link to the cached file.
+        $lock = fopen("{$this->cachePath}/.locks/token", 'c');
+        flock($lock, LOCK_EX);
+        link("{$this->cachePath}/abc", "{$this->cachePath}/.refs/token.0");
+
+        // max_size of 0 forces size pruning to want to delete every file. The
+        // file is freshly created, so age pruning leaves it alone.
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_size' => 0,
+        ]);
+        $cache->prune();
+
+        // The live reference (nlink > 1) protects the file from max-size pruning.
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/abc"));
 
         flock($lock, LOCK_UN);
         fclose($lock);
