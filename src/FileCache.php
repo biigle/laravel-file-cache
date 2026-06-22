@@ -190,15 +190,19 @@ class FileCache implements FileCacheContract
      */
     public function batch(array $files, callable $callback, bool $throwOnLock = false)
     {
-        $retrieved = array_map(function ($file) use ($throwOnLock) {
-            return $this->retrieve($file, $throwOnLock);
-        }, $files);
-
-        $paths = array_map(function ($file) {
-            return $file['path'];
-        }, $retrieved);
+        $retrieved = [];
 
         try {
+            // Must be a loop so $retrieved is populated incrementally. If retrieve()
+            // throws, the finally block can still clean up any links created so far.
+            foreach ($files as $file) {
+                $retrieved[] = $this->retrieve($file, $throwOnLock);
+            }
+
+            $paths = array_map(function ($file) {
+                return $file['path'];
+            }, $retrieved);
+
             $result = call_user_func($callback, $files, $paths);
         } finally {
             foreach ($retrieved as $file) {
@@ -223,15 +227,19 @@ class FileCache implements FileCacheContract
      */
     public function batchOnce(array $files, callable $callback, bool $throwOnLock = false)
     {
-        $retrieved = array_map(function ($file) use ($throwOnLock) {
-            return $this->retrieve($file, $throwOnLock);
-        }, $files);
-
-        $paths = array_map(function ($file) {
-            return $file['path'];
-        }, $retrieved);
+        $retrieved = [];
 
         try {
+            // Must be a loop so $retrieved is populated incrementally. If retrieve()
+            // throws, the finally block can still clean up any links created so far.
+            foreach ($files as $file) {
+                $retrieved[] = $this->retrieve($file, $throwOnLock);
+            }
+
+            $paths = array_map(function ($file) {
+                return $file['path'];
+            }, $retrieved);
+
             $result = call_user_func($callback, $files, $paths);
         } finally {
             foreach ($retrieved as $file) {
@@ -665,6 +673,7 @@ class FileCache implements FileCacheContract
         }
 
         if (!flock($handle, LOCK_EX)) {
+            fclose($handle);
             @unlink($path);
             throw new RuntimeException("Could not get lock on file {$path}");
         }
@@ -715,14 +724,19 @@ class FileCache implements FileCacheContract
             return;
         }
 
+        $alive = [];
         $links = Finder::create()
             ->files()
             ->in($dir)
-            ->filter(function (SplFileInfo $file) {
+            ->filter(function (SplFileInfo $file) use (&$alive) {
+                $token = $this->referenceLinkToken($file->getFilename());
                 // We only want to delete references of dead processes.
-                return !$this->isProcessAlive(
-                    $this->referenceLinkToken($file->getFilename())
-                );
+                // Memoize per token since a worker may hold many links.
+                if (!array_key_exists($token, $alive)) {
+                    $alive[$token] = $this->isProcessAlive($token);
+                }
+
+                return !$alive[$token];
             })
             ->getIterator();
 
