@@ -132,8 +132,10 @@ class FileCacheTest extends TestCase
         $hash = hash('sha256', 'test://test-image.jpg');
         $cache = new FileCache(['path' => $this->cachePath]);
 
+        // Files of a local disk are used in place and not copied to the cache.
         $path = $cache->get($file, $this->noop);
-        $this->assertEquals("{$this->cachePath}/{$hash}", $path);
+        $this->assertEquals("{$this->diskPath}/test-image.jpg", $path);
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
     public function testGetDiskLocalDoesNotExist()
@@ -159,6 +161,7 @@ class FileCacheTest extends TestCase
 
         $mock = Mockery::mock();
         $mock->shouldReceive('disk')->once()->with('s3')->andReturn($mock);
+        $mock->shouldReceive('getConfig')->andReturn(['driver' => 's3']);
         $mock->shouldReceive('readStream')->once()->andReturn($stream);
         $this->app['filesystem'] = $mock;
 
@@ -180,6 +183,7 @@ class FileCacheTest extends TestCase
 
         $mock = Mockery::mock();
         $mock->shouldReceive('disk')->once()->with('s3')->andReturn($mock);
+        $mock->shouldReceive('getConfig')->andReturn(['driver' => 's3']);
         $mock->shouldReceive('readStream')->once()->andReturn($stream);
         $this->app['filesystem'] = $mock;
 
@@ -208,6 +212,7 @@ class FileCacheTest extends TestCase
 
         $mock = Mockery::mock();
         $mock->shouldReceive('disk')->once()->with('s3')->andReturn($mock);
+        $mock->shouldReceive('getConfig')->andReturn(['driver' => 's3']);
         $mock->shouldReceive('readStream')->once()->andReturn($stream);
         $this->app['filesystem'] = $mock;
 
@@ -238,15 +243,17 @@ class FileCacheTest extends TestCase
 
     public function testGetIgnoreZeroSize()
     {
-        $cache = new FileCache(['path' => $this->cachePath]);
-        $file = new GenericFile('fixtures://test-file.txt');
-        $hash = hash('sha256', 'fixtures://test-file.txt');
+        // A remote file is used because local disk files are not cached.
+        $file = new GenericFile('https://files/image.jpg');
+        $hash = hash('sha256', 'https://files/image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
 
         $path = "{$this->cachePath}/{$hash}";
         touch($path);
         $this->assertEquals(0, filesize($path));
 
-        $file = $cache->get($file, function ($file, $path) {
+        $cache->get($file, function ($file, $path) {
             return $file;
         });
 
@@ -341,7 +348,6 @@ class FileCacheTest extends TestCase
         $this->app['files']->put("{$this->diskPath}/test-image.jpg", 'abc');
         $file = new GenericFile('test://test-image.jpg');
         $file2 = new GenericFile('test://test-image.jpg');
-        $hash = hash('sha256', 'test://test-image.jpg');
 
         $cache = new FileCache(['path' => $this->cachePath]);
         $paths = $cache->batch([$file, $file2], function ($files, $paths) {
@@ -349,8 +355,8 @@ class FileCacheTest extends TestCase
         });
 
         $this->assertCount(2, $paths);
-        $this->assertStringContainsString($hash, $paths[0]);
-        $this->assertStringContainsString($hash, $paths[1]);
+        $this->assertEquals("{$this->diskPath}/test-image.jpg", $paths[0]);
+        $this->assertEquals("{$this->diskPath}/test-image.jpg", $paths[1]);
     }
 
     public function testBatchThrowOnLock()
