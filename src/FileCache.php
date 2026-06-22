@@ -846,7 +846,14 @@ class FileCache implements FileCacheContract
             ->files()
             ->in($dir)
             ->filter(function (SplFileInfo $file) use ($maxMTime) {
-                if ($file->getMTime() > $maxMTime) {
+                try {
+                    $mTime = $file->getMTime();
+                } catch (RuntimeException $e) {
+                    // The lock file may have been deleted concurrently.
+                    return false;
+                }
+
+                if ($mTime > $maxMTime) {
                     return false;
                 }
 
