@@ -493,7 +493,9 @@ class FileCache implements FileCacheContract
             // Remove the empty file if writing failed. This is the case that is caught
             // by 'nlink' === 0 above.
             @unlink($cachedPath);
-            fclose($handle);
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
             throw new Exception("Error while caching file '{$file->getUrl()}': {$e->getMessage()}");
         }
     }
