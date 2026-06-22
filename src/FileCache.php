@@ -514,6 +514,20 @@ class FileCache implements FileCacheContract
         // finished.
         flock($handle, LOCK_EX);
 
+        // Between creating the file with 'x+' and acquiring the lock, another
+        // process may have grabbed a shared lock, seen the empty file and deleted
+        // it. So we check again if the file exists after having the lock.
+        $stat = fstat($handle);
+        if ($stat === false) {
+            fclose($handle);
+            throw new RuntimeException("Could not stat cached file '{$cachedPath}'.");
+        }
+
+        if ($stat['nlink'] === 0) {
+            fclose($handle);
+            return $this->retrieve($file, $throwOnLock, $attempt + 1);
+        }
+
         try {
             return $this->retrieveNewFile($file, $cachedPath, $handle);
         } catch (Exception $e) {
