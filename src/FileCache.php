@@ -199,42 +199,38 @@ class FileCache implements FileCacheContract
      */
     public function batch(array $files, callable $callback, bool $throwOnLock = false)
     {
-        $retrieved = [];
-
-        try {
-            // Must be a loop so $retrieved is populated incrementally. If retrieve()
-            // throws, the finally block can still clean up any links created so far.
-            foreach ($files as $file) {
-                $retrieved[] = $this->retrieve($file, $throwOnLock);
-            }
-
-            $paths = array_map(function ($file) {
-                return $file['path'];
-            }, $retrieved);
-
-            $result = call_user_func($callback, $files, $paths);
-        } finally {
-            foreach ($retrieved as $file) {
-                // Locally stored files have no reference link and must not be
-                // deleted.
-                if (is_null($file['link'])) {
-                    continue;
-                }
-
-                // Update the atime so the pruner knows when the file was last used.
-                // May be relevant for (hours-)long batches.
-                @touch($file['link']);
-                @unlink($file['link']);
-            }
-        }
-
-        return $result;
+        return $this->runBatch($files, $callback, $throwOnLock, function ($file) {
+            // Update the atime so the pruner knows when the file was last used.
+            // May be relevant for (hours-)long batches.
+            @touch($file['link']);
+            @unlink($file['link']);
+        });
     }
 
     /**
      * {@inheritdoc}
      */
     public function batchOnce(array $files, callable $callback, bool $throwOnLock = false)
+    {
+        return $this->runBatch($files, $callback, $throwOnLock, function ($file) {
+            @unlink($file['link']);
+            $this->delete(new SplFileInfo($file['path']));
+        });
+    }
+
+    /**
+     * Retrieve the files, run the callback with their paths and clean up the
+     * reference links afterwards.
+     *
+     * @param File[] $files
+     * @param callable $callback
+     * @param bool $throwOnLock
+     * @param callable $cleanup Cleanup applied to each retrieved file that has a
+     * reference link (i.e. is not locally stored).
+     *
+     * @return mixed The return value of the callback.
+     */
+    protected function runBatch(array $files, callable $callback, bool $throwOnLock, callable $cleanup)
     {
         $retrieved = [];
 
@@ -258,8 +254,7 @@ class FileCache implements FileCacheContract
                     continue;
                 }
 
-                @unlink($file['link']);
-                $this->delete(new SplFileInfo($file['path']));
+                $cleanup($file);
             }
         }
 
@@ -330,9 +325,7 @@ class FileCache implements FileCacheContract
         if (!empty($this->config['mime_types'])) {
             $type = $response->getHeaderLine('content-type');
             $type = trim(explode(';', $type)[0]);
-            if (!in_array($type, $this->config['mime_types'])) {
-                throw new Exception("MIME type '{$type}' not allowed.");
-            }
+            $this->assertMimeTypeAllowed($type);
         }
 
         $maxBytes = intval($this->config['max_file_size']);
@@ -348,9 +341,7 @@ class FileCache implements FileCacheContract
                 throw new Exception("File size could not be determined (missing or invalid content-length header).");
             }
 
-            if ($contentLength > $maxBytes) {
-                throw new Exception("The file is too large with more than {$maxBytes} bytes.");
-            }
+            $this->assertSizeAllowed($contentLength);
         }
 
         return true;
@@ -374,22 +365,46 @@ class FileCache implements FileCacheContract
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = $disk->mimeType($url[1]);
-            if (!in_array($type, $this->config['mime_types'])) {
-                throw new Exception("MIME type '{$type}' not allowed.");
-            }
+            $this->assertMimeTypeAllowed($disk->mimeType($url[1]));
         }
 
         $maxBytes = intval($this->config['max_file_size']);
 
         if ($maxBytes >= 0) {
-            $size = $disk->size($url[1]);
-            if ($size > $maxBytes) {
-                throw new Exception("The file is too large with more than {$maxBytes} bytes.");
-            }
+            $this->assertSizeAllowed($disk->size($url[1]));
         }
 
         return true;
+    }
+
+    /**
+     * Throw if the given MIME type is not in the configured allow list.
+     *
+     * @param string $type
+     * @throws Exception If the MIME type is not allowed.
+     */
+    protected function assertMimeTypeAllowed($type)
+    {
+        $allowed = $this->config['mime_types'];
+        if (!empty($allowed) && !in_array($type, $allowed)) {
+            throw new Exception("MIME type '{$type}' not allowed.");
+        }
+    }
+
+    /**
+     * Throw if the given file size exceeds the configured max_file_size. A
+     * negative max_file_size disables the check.
+     *
+     * @param int $size Size in bytes.
+     * @throws Exception If the file is too large.
+     */
+    protected function assertSizeAllowed($size)
+    {
+        $maxBytes = intval($this->config['max_file_size']);
+
+        if ($maxBytes >= 0 && $size > $maxBytes) {
+            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
+        }
     }
 
     /**
@@ -599,10 +614,7 @@ class FileCache implements FileCacheContract
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = $this->files->mimeType($cachedPath);
-            if (!in_array($type, $this->config['mime_types'])) {
-                throw new Exception("MIME type '{$type}' not allowed.");
-            }
+            $this->assertMimeTypeAllowed($this->files->mimeType($cachedPath));
         }
 
         $link = null;
@@ -1025,9 +1037,7 @@ class FileCache implements FileCacheContract
             throw new Exception('The source resource is invalid.');
         }
 
-        if ($maxBytes >= 0 && $bytes > $maxBytes) {
-            throw new Exception("The file is too large with more than {$maxBytes} bytes.");
-        }
+        $this->assertSizeAllowed($bytes);
 
         $metadata = stream_get_meta_data($source);
 
