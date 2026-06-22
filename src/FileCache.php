@@ -552,6 +552,18 @@ class FileCache implements FileCacheContract
         $url = explode('://', $file->getUrl());
         $disk = $this->getDisk($file);
 
+        // Files of the local driver are not cached but used in place. Flysystem 3
+        // no longer exposes the adapter, so the driver is read from the disk
+        // config instead.
+        $driver = $disk->getConfig()['driver'] ?? null;
+        if ($driver === 'local') {
+            if (!$disk->exists($url[1])) {
+                throw new Exception('File does not exist.');
+            }
+
+            return $disk->path($url[1]);
+        }
+
         $source = $disk->readStream($url[1]);
         if (is_null($source)) {
             throw new Exception('File does not exist.');
