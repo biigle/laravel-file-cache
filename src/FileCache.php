@@ -36,6 +36,15 @@ class FileCache implements FileCacheContract
     const REFS_DIR = '.refs';
 
     /**
+     * Maximum number of times retrieve() retries when the cached file keeps
+     * disappearing or is left empty by a failing writer. Bounds the retries so
+     * a persistently failing file cannot loop forever.
+     *
+     * @var integer
+     */
+    const MAX_RETRIEVE_ATTEMPTS = 10;
+
+    /**
      * Counter for reference links used to generate unique names per instance.
      *
      * @var integer
@@ -357,14 +366,15 @@ class FileCache implements FileCacheContract
     protected function existsDisk($file)
     {
         $url = explode('://', $file->getUrl());
-        $exists = $this->getDisk($file)->exists($url[1]);
+        $disk = $this->getDisk($file);
+        $exists = $disk->exists($url[1]);
 
         if (!$exists) {
             return false;
         }
 
         if (!empty($this->config['mime_types'])) {
-            $type = $this->getDisk($file)->mimeType($url[1]);
+            $type = $disk->mimeType($url[1]);
             if (!in_array($type, $this->config['mime_types'])) {
                 throw new Exception("MIME type '{$type}' not allowed.");
             }
@@ -373,7 +383,7 @@ class FileCache implements FileCacheContract
         $maxBytes = intval($this->config['max_file_size']);
 
         if ($maxBytes >= 0) {
-            $size = $this->getDisk($file)->size($url[1]);
+            $size = $disk->size($url[1]);
             if ($size > $maxBytes) {
                 throw new Exception("The file is too large with more than {$maxBytes} bytes.");
             }
@@ -436,6 +446,7 @@ class FileCache implements FileCacheContract
      *
      * @param File $file File to get the path for
      * @param bool $throwOnLock Whether to throw an exception if a file is currently locked (i.e. written to). Otherwise the method will wait until the lock is released.
+     * @param int $attempt Current retry attempt. Used internally to bound the recursion.
      * @throws Exception If the file could not be cached.
      * @throws FileLockedException If the file is locked and `throwOnLock` was `true`.
      *
@@ -443,8 +454,14 @@ class FileCache implements FileCacheContract
      * (or `null` for locally stored files). Unlink the reference link when
      * finished.
      */
-    protected function retrieve(File $file, bool $throwOnLock = false)
+    protected function retrieve(File $file, bool $throwOnLock = false, int $attempt = 0)
     {
+        // A file that keeps disappearing or is repeatedly left empty by a failing
+        // writer must not recurse forever.
+        if ($attempt >= self::MAX_RETRIEVE_ATTEMPTS) {
+            throw new Exception("Failed to retrieve file '{$file->getUrl()}' after ".self::MAX_RETRIEVE_ATTEMPTS." attempts.");
+        }
+
         $this->ensureDirExists($this->config['path']);
         $cachedPath = $this->getCachedPath($file);
 
@@ -454,7 +471,12 @@ class FileCache implements FileCacheContract
 
         if ($handle === false) {
             // The file exists, get the file handle in read mode.
-            $handle = fopen($cachedPath, 'r');
+            $handle = @fopen($cachedPath, 'r');
+            // The cached file may be deleted between the first fopen and now. Retry.
+            if ($handle === false) {
+                return $this->retrieve($file, $throwOnLock, $attempt + 1);
+            }
+
             if ($throwOnLock && !flock($handle, LOCK_SH | LOCK_NB)) {
                 fclose($handle);
                 throw new FileLockedException;
@@ -464,11 +486,16 @@ class FileCache implements FileCacheContract
             flock($handle, LOCK_SH);
 
             $stat = fstat($handle);
+            if ($stat === false) {
+                fclose($handle);
+                throw new RuntimeException("Could not stat cached file '{$cachedPath}'.");
+            }
+
             // Check if the file is still there since the writing operation could have
             // failed. If the file is gone, retry retrieve.
             if ($stat['nlink'] === 0) {
                 fclose($handle);
-                return $this->retrieve(...func_get_args());
+                return $this->retrieve($file, $throwOnLock, $attempt + 1);
             }
 
             // File caching may have failed and left an empty file in the cache.
@@ -476,7 +503,7 @@ class FileCache implements FileCacheContract
             if ($stat['size'] === 0) {
                 fclose($handle);
                 $this->delete(new SplFileInfo($cachedPath));
-                return $this->retrieve(...func_get_args());
+                return $this->retrieve($file, $throwOnLock, $attempt + 1);
             }
 
             // The file exists and is no longer written to.
@@ -767,6 +794,7 @@ class FileCache implements FileCacheContract
         foreach ($files as $file) {
             try {
                 $aTime = $file->getATime();
+                $size = $file->getSize();
             } catch (RuntimeException $e) {
                 // This can happen if the file is deleted in the meantime.
                 continue;
@@ -776,7 +804,7 @@ class FileCache implements FileCacheContract
                 continue;
             }
 
-            $totalSize += $file->getSize();
+            $totalSize += $size;
         }
 
         return $totalSize;
@@ -821,7 +849,13 @@ class FileCache implements FileCacheContract
                 break;
             }
 
-            $fileSize = $file->getSize();
+            try {
+                $fileSize = $file->getSize();
+            } catch (RuntimeException $e) {
+                // This can happen if the file is deleted in the meantime.
+                continue;
+            }
+
             if ($this->delete($file)) {
                 $currentSize -= $fileSize;
             }
