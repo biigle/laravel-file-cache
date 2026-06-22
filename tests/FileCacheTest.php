@@ -374,11 +374,37 @@ class FileCacheTest extends TestCase
         $cache->batch([$file], fn ($file, $path) => $file, true);
     }
 
-    public function testBatchOnce()
+    public function testBatchOnceLocal()
     {
         $file = new GenericFile('fixtures://test-image.jpg');
         $hash = hash('sha256', 'fixtures://test-image.jpg');
-        (new FileCache(['path' => $this->cachePath]))->batchOnce([$file], $this->noop);
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->batchOnce([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // Local files are served from disk, so no reference link or canonical
+        // cache file is created.
+        $this->assertCount(0, $linksDuringCallback);
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
+    }
+
+    public function testBatchOnceRemote()
+    {
+        $file = new GenericFile('http://test-image.jpg');
+        $hash = hash('sha256', 'http://test-image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
+
+        $linksDuringCallback = $cache->batchOnce([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // A reference link exists while the callback runs...
+        $this->assertCount(1, $linksDuringCallback);
+        // ...and afterwards both the link and the canonical file are removed.
+        $this->assertCount(0, glob("{$this->cachePath}/.refs/*"));
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
     }
 
@@ -429,6 +455,157 @@ class FileCacheTest extends TestCase
         fclose($handle);
         $this->assertTrue($this->app['files']->exists("{$this->cachePath}/def"));
         $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
+    }
+
+    public function testPruneByMaxAgeKeepsReferencedFile()
+    {
+        $this->app['files']->put("{$this->cachePath}/abc", 'abc');
+        touch("{$this->cachePath}/abc", time() - 61);
+
+        $this->app['files']->makeDirectory("{$this->cachePath}/.locks", 0755, false, true);
+        $this->app['files']->makeDirectory("{$this->cachePath}/.refs", 0755, false, true);
+
+        // Simulate a live worker: hold an exclusive lock on its lock file and
+        // keep a reference link to the cached file.
+        $lock = fopen("{$this->cachePath}/.locks/token", 'c');
+        flock($lock, LOCK_EX);
+        link("{$this->cachePath}/abc", "{$this->cachePath}/.refs/token.0");
+
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_age' => 1,
+        ]);
+        $cache->prune();
+
+        // The live reference protects the file and is left in place.
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/abc"));
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/.refs/token.0"));
+
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+
+    public function testPruneByMaxSizeKeepsReferencedFile()
+    {
+        $this->app['files']->put("{$this->cachePath}/abc", 'abc');
+
+        $this->app['files']->makeDirectory("{$this->cachePath}/.locks", 0755, false, true);
+        $this->app['files']->makeDirectory("{$this->cachePath}/.refs", 0755, false, true);
+
+        // Simulate a live worker: hold an exclusive lock on its lock file and
+        // keep a reference link to the cached file.
+        $lock = fopen("{$this->cachePath}/.locks/token", 'c');
+        flock($lock, LOCK_EX);
+        link("{$this->cachePath}/abc", "{$this->cachePath}/.refs/token.0");
+
+        // max_size of 0 forces size pruning to want to delete every file. The
+        // file is freshly created, so age pruning leaves it alone.
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_size' => 0,
+        ]);
+        $cache->prune();
+
+        // The live reference (nlink > 1) protects the file from max-size pruning.
+        $this->assertTrue($this->app['files']->exists("{$this->cachePath}/abc"));
+
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+
+    public function testPruneReapsStaleReference()
+    {
+        $this->app['files']->put("{$this->cachePath}/abc", 'abc');
+        touch("{$this->cachePath}/abc", time() - 61);
+
+        $this->app['files']->makeDirectory("{$this->cachePath}/.refs", 0755, false, true);
+        // Reference link of a crashed worker: no lock file exists for its token,
+        // so the owning process counts as dead.
+        link("{$this->cachePath}/abc", "{$this->cachePath}/.refs/token.0");
+
+        $cache = new FileCache([
+            'path' => $this->cachePath,
+            'max_age' => 1,
+        ]);
+        $cache->prune();
+
+        // The stale reference is reaped, which makes the file prunable.
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/.refs/token.0"));
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/abc"));
+    }
+
+    public function testPruneReapsOrphanLockFile()
+    {
+        $this->app['files']->makeDirectory("{$this->cachePath}/.locks", 0755, false, true);
+        $lockFile = "{$this->cachePath}/.locks/token";
+        // An unlocked lock file old enough to be past the grace window belongs
+        // to a crashed worker.
+        touch($lockFile, time() - 2);
+
+        $cache = new FileCache(['path' => $this->cachePath]);
+        $cache->prune();
+
+        $this->assertFalse($this->app['files']->exists($lockFile));
+    }
+
+    public function testGetLocalCreatesNoReferenceLink()
+    {
+        $file = new GenericFile('fixtures://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->get($file, function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // Local files are served from disk and not reference-linked.
+        $this->assertCount(0, $linksDuringCallback);
+    }
+
+    public function testBatchLocalCreatesNoReferenceLink()
+    {
+        $file = new GenericFile('fixtures://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->batch([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // Local files are served from disk and not reference-linked.
+        $this->assertCount(0, $linksDuringCallback);
+    }
+
+    public function testGetRemoteCreatesReferenceLink()
+    {
+        $file = new GenericFile('http://test-image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
+
+        $linksDuringCallback = $cache->get($file, function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // A reference link exists while the callback runs (without an open file
+        // handle per file)...
+        $this->assertCount(1, $linksDuringCallback);
+        // ...and is removed once the callback returns.
+        $this->assertCount(0, glob("{$this->cachePath}/.refs/*"));
+    }
+
+    public function testBatchRemoteCreatesReferenceLink()
+    {
+        $file = new GenericFile('http://test-image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
+
+        $linksDuringCallback = $cache->batch([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // A reference link exists while the callback runs (without an open file
+        // handle per file)...
+        $this->assertCount(1, $linksDuringCallback);
+        // ...and is removed once the callback returns.
+        $this->assertCount(0, glob("{$this->cachePath}/.refs/*"));
     }
 
     public function testMimeTypeWhitelist()
