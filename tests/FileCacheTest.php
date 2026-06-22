@@ -374,11 +374,28 @@ class FileCacheTest extends TestCase
         $cache->batch([$file], fn ($file, $path) => $file, true);
     }
 
-    public function testBatchOnce()
+    public function testBatchOnceLocal()
     {
         $file = new GenericFile('fixtures://test-image.jpg');
         $hash = hash('sha256', 'fixtures://test-image.jpg');
         $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->batchOnce([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // Local files are served from disk, so no reference link or canonical
+        // cache file is created.
+        $this->assertCount(0, $linksDuringCallback);
+        $this->assertFalse($this->app['files']->exists("{$this->cachePath}/{$hash}"));
+    }
+
+    public function testBatchOnceRemote()
+    {
+        $file = new GenericFile('http://test-image.jpg');
+        $hash = hash('sha256', 'http://test-image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
 
         $linksDuringCallback = $cache->batchOnce([$file], function () {
             return glob("{$this->cachePath}/.refs/*");
@@ -531,10 +548,37 @@ class FileCacheTest extends TestCase
         $this->assertFalse($this->app['files']->exists($lockFile));
     }
 
-    public function testGetCreatesReferenceLink()
+    public function testGetLocalCreatesNoReferenceLink()
     {
         $file = new GenericFile('fixtures://test-image.jpg');
         $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->get($file, function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // Local files are served from disk and not reference-linked.
+        $this->assertCount(0, $linksDuringCallback);
+    }
+
+    public function testBatchLocalCreatesNoReferenceLink()
+    {
+        $file = new GenericFile('fixtures://test-image.jpg');
+        $cache = new FileCache(['path' => $this->cachePath]);
+
+        $linksDuringCallback = $cache->batch([$file], function () {
+            return glob("{$this->cachePath}/.refs/*");
+        });
+
+        // Local files are served from disk and not reference-linked.
+        $this->assertCount(0, $linksDuringCallback);
+    }
+
+    public function testGetRemoteCreatesReferenceLink()
+    {
+        $file = new GenericFile('http://test-image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
 
         $linksDuringCallback = $cache->get($file, function () {
             return glob("{$this->cachePath}/.refs/*");
@@ -547,10 +591,11 @@ class FileCacheTest extends TestCase
         $this->assertCount(0, glob("{$this->cachePath}/.refs/*"));
     }
 
-    public function testBatchCreatesReferenceLink()
+    public function testBatchRemoteCreatesReferenceLink()
     {
-        $file = new GenericFile('fixtures://test-image.jpg');
-        $cache = new FileCache(['path' => $this->cachePath]);
+        $file = new GenericFile('http://test-image.jpg');
+        $cache = new FileCacheStub(['path' => $this->cachePath]);
+        $cache->stream = fopen(__DIR__.'/files/test-image.jpg', 'r');
 
         $linksDuringCallback = $cache->batch([$file], function () {
             return glob("{$this->cachePath}/.refs/*");
