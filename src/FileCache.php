@@ -237,8 +237,8 @@ class FileCache implements FileCacheContract
         try {
             // Must be a loop so $retrieved is populated incrementally. If retrieve()
             // throws, the finally block can still clean up any links created so far.
-            foreach ($files as $file) {
-                $retrieved[] = $this->retrieve($file, $throwOnLock);
+            foreach ($files as $index => $file) {
+                $retrieved[$index] = $this->retrieve($file, $throwOnLock);
             }
 
             $paths = array_map(function ($file) {
